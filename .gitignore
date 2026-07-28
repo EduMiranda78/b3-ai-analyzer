@@ -1,0 +1,24 @@
+
+# Variáveis e credenciais
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Ambientes virtuais
+venv/
+.venv/
+env/
+
+# Arquivos locais
+*.log
+.DS_Store
+
+# Backups locais
+backup_*/
