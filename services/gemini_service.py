@@ -7,7 +7,9 @@ from google.genai import types
 
 @lru_cache(maxsize=1)
 def _obter_cliente():
-    api_key = os.getenv("GOOGLE_API_KEY")
+    api_key = os.getenv(
+        "GOOGLE_API_KEY"
+    )
 
     if not api_key:
         raise RuntimeError(
@@ -16,10 +18,15 @@ def _obter_cliente():
 
     return genai.Client(
         api_key=api_key,
+        http_options=types.HttpOptions(
+            timeout=15_000,
+        ),
     )
 
 
-def gerar_relatorio(prompt: str) -> str:
+def gerar_relatorio(
+    prompt: str,
+) -> str:
     modelo = os.getenv(
         "GEMINI_MODEL",
         "gemini-2.5-flash",
@@ -39,7 +46,9 @@ def gerar_relatorio(prompt: str) -> str:
         ),
     )
 
-    texto = (response.text or "").strip()
+    texto = (
+        response.text or ""
+    ).strip()
 
     if not texto:
         raise RuntimeError(

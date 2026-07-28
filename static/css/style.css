@@ -369,3 +369,173 @@ input:focus {
         flex-direction: column;
     }
 }
+/* ===== FASE 3: SINAL TÉCNICO ===== */
+
+.report-kicker {
+    margin: 0 0 6px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    opacity: 0.65;
+}
+
+.report-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+}
+
+.signal-badge {
+    min-width: 130px;
+    padding: 14px 20px;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 1.15rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+}
+
+.signal-compra {
+    color: #d7ffe7;
+    background: #176b3a;
+}
+
+.signal-venda {
+    color: #ffe0e0;
+    background: #8c2525;
+}
+
+.signal-neutro {
+    color: #fff4cf;
+    background: #75601d;
+}
+
+.signal-summary {
+    display: grid;
+    grid-template-columns:
+        repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin: 28px 0;
+}
+
+.metric-card {
+    padding: 16px;
+    border: 1px solid
+        rgba(128, 128, 128, 0.25);
+    border-radius: 10px;
+}
+
+.metric-card span,
+.trade-plan-grid span {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.82rem;
+    opacity: 0.7;
+}
+
+.metric-card strong,
+.trade-plan-grid strong {
+    font-size: 1.1rem;
+}
+
+.trade-plan {
+    margin: 24px 0;
+    padding: 20px;
+    border: 1px solid
+        rgba(128, 128, 128, 0.25);
+    border-radius: 12px;
+}
+
+.trade-plan h2 {
+    margin-top: 0;
+}
+
+.trade-plan-grid {
+    display: grid;
+    grid-template-columns:
+        repeat(4, minmax(0, 1fr));
+    gap: 18px;
+}
+
+.signal-reasons {
+    display: grid;
+    grid-template-columns:
+        repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    margin: 24px 0;
+}
+
+.signal-reasons > div {
+    padding: 18px;
+    border: 1px solid
+        rgba(128, 128, 128, 0.25);
+    border-radius: 10px;
+}
+
+.signal-reasons h2 {
+    margin-top: 0;
+    font-size: 1.05rem;
+}
+
+.signal-reasons ul {
+    margin-bottom: 0;
+    padding-left: 20px;
+}
+
+.signal-reasons li {
+    margin-bottom: 8px;
+    line-height: 1.45;
+}
+
+.alert-panel {
+    border-color:
+        rgba(210, 155, 40, 0.55)
+        !important;
+}
+
+.report-disclaimer {
+    margin-top: 24px;
+    padding: 14px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    opacity: 0.72;
+    background:
+        rgba(128, 128, 128, 0.10);
+}
+
+@media (max-width: 760px) {
+    .report-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .signal-badge {
+        width: 100%;
+    }
+
+    .signal-summary,
+    .trade-plan-grid,
+    .signal-reasons {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media print {
+    .report-footer {
+        display: none;
+    }
+}
+
+.fallback-notice {
+    margin: 22px 0;
+    padding: 14px 16px;
+    border: 1px solid rgba(210, 155, 40, 0.55);
+    border-radius: 8px;
+    background: rgba(210, 155, 40, 0.10);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+

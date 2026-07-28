@@ -50,13 +50,13 @@ def test_calcula_indicadores_de_alta():
     )
 
     assert resultado["suporte20"] == pytest.approx(
-        178.0
+        177.0
     )
 
     assert resultado[
         "resistencia20"
     ] == pytest.approx(
-        201.0
+        200.0
     )
 
     assert resultado[

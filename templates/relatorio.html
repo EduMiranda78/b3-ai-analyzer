@@ -1,16 +1,22 @@
 <!DOCTYPE html>
-
 <html lang="pt-BR">
 
 <head>
-
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Relatório de Mercado</title>
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>
+        Relatório de Mercado
+    </title>
 
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/style.css') }}"
+    >
 </head>
 
 <body class="report-page">
@@ -21,14 +27,17 @@
 
         <div class="error-card">
 
-            <h1>Falha na Análise</h1>
+            <h1>Falha na análise</h1>
 
             <div class="error-message">
                 {{ error }}
             </div>
 
-            <a href="/" class="btn-secondary">
-                Nova Consulta
+            <a
+                href="/"
+                class="btn-secondary"
+            >
+                Nova consulta
             </a>
 
         </div>
@@ -39,28 +48,192 @@
 
             <div class="report-header">
 
-                <h1>Relatório Gerado</h1>
+                <div>
+                    <p class="report-kicker">
+                        Análise técnica
+                    </p>
 
-                <p>
-                    Análise produzida com dados de mercado e IA.
-                </p>
+                    <h1>
+                        {{ ticker }}
+                    </h1>
+
+                    <p>
+                        Processado em
+                        {{ "%.2f"|format(tempo_total) }}
+                        segundos
+                    </p>
+                </div>
+
+                <div
+                    class="signal-badge signal-{{ analise.sinal|lower }}"
+                >
+                    {{ analise.sinal }}
+                </div>
 
             </div>
 
-            <div class="report-content">
+            <section class="signal-summary">
+
+                <div class="metric-card">
+                    <span>Pontuação</span>
+                    <strong>
+                        {{ analise.pontos }}
+                    </strong>
+                </div>
+
+                <div class="metric-card">
+                    <span>Confiança</span>
+                    <strong>
+                        {{ analise.confianca }}
+                    </strong>
+                </div>
+
+                <div class="metric-card">
+                    <span>Preço</span>
+                    <strong>
+                        R$
+                        {{ "%.2f"|format(indicadores.preco) }}
+                    </strong>
+                </div>
+
+                <div class="metric-card">
+                    <span>RSI 14</span>
+                    <strong>
+                        {{ "%.2f"|format(indicadores.rsi14) }}
+                    </strong>
+                </div>
+
+            </section>
+
+            {% if analise.preco_referencia is not none %}
+
+            <section class="trade-plan">
+
+                <h2>
+                    Plano técnico
+                </h2>
+
+                <div class="trade-plan-grid">
+
+                    <div>
+                        <span>Referência</span>
+                        <strong>
+                            R$
+                            {{ "%.2f"|format(analise.preco_referencia) }}
+                        </strong>
+                    </div>
+
+                    <div>
+                        <span>Stop</span>
+                        <strong>
+                            R$
+                            {{ "%.2f"|format(analise.stop) }}
+                        </strong>
+                    </div>
+
+                    <div>
+                        <span>Alvo</span>
+                        <strong>
+                            R$
+                            {{ "%.2f"|format(analise.alvo) }}
+                        </strong>
+                    </div>
+
+                    <div>
+                        <span>Risco-retorno</span>
+                        <strong>
+                            1 :
+                            {{ "%.2f"|format(analise.risco_retorno) }}
+                        </strong>
+                    </div>
+
+                </div>
+
+            </section>
+
+            {% endif %}
+
+            <section class="signal-reasons">
+
+                <div>
+                    <h2>
+                        Motivos do sinal
+                    </h2>
+
+                    <ul>
+                        {% for motivo in analise.motivos %}
+                        <li>
+                            {{ motivo }}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                {% if analise.alertas %}
+
+                <div class="alert-panel">
+
+                    <h2>
+                        Pontos de atenção
+                    </h2>
+
+                    <ul>
+                        {% for alerta in analise.alertas %}
+                        <li>
+                            {{ alerta }}
+                        </li>
+                        {% endfor %}
+                    </ul>
+
+                </div>
+
+                {% endif %}
+
+            </section>
+
+
+            {% if origem_relatorio == "motor local" %}
+
+            <div class="fallback-notice">
+
+                A explicação pela IA ficou
+                temporariamente indisponível.
+                Este relatório foi montado pelo
+                motor técnico local.
+
+            </div>
+
+            {% endif %}
+
+            <section class="report-content">
 
                 {{ relatorio|safe }}
+
+            </section>
+
+            <div class="report-disclaimer">
+
+                Esta é uma leitura técnica baseada em
+                dados históricos. Não representa garantia
+                de resultado nem recomendação individual
+                de investimento.
 
             </div>
 
             <div class="report-footer">
 
-                <a href="/" class="btn-secondary">
-                    Nova Consulta
+                <a
+                    href="/"
+                    class="btn-secondary"
+                >
+                    Nova consulta
                 </a>
 
-                <button onclick="window.print()" class="btn-primary">
-                    Imprimir Relatório
+                <button
+                    onclick="window.print()"
+                    class="btn-primary"
+                >
+                    Imprimir relatório
                 </button>
 
             </div>

@@ -1,5 +1,4 @@
 import logging
-import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -24,6 +23,12 @@ from services.indicators_service import (
 from services.market_service import (
     buscar_dados_ativo,
 )
+from services.report_service import (
+    gerar_relatorio_local,
+)
+from services.signal_service import (
+    calcular_sinal_tecnico,
+)
 from services.telegram_service import (
     enviar_para_telegram,
 )
@@ -31,66 +36,138 @@ from services.telegram_service import (
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
+    format=(
+        "%(asctime)s | %(levelname)s | "
+        "%(message)s"
+    ),
 )
 
-logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger(
+    "httpx"
+).setLevel(
+    logging.WARNING
+)
 
-logging.getLogger("google_genai").setLevel(logging.WARNING)
+logging.getLogger(
+    "google_genai"
+).setLevel(
+    logging.WARNING
+)
 
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-app.config["TEMPLATES_AUTO_RELOAD"] = False
-
-
-TICKER_PATTERN = re.compile(
-    r"^[A-Z0-9]{4,6}(\.SA)?$"
-)
-
-SINAL_PATTERN = re.compile(
-    r"SINALIZAÇÃO\s+FINAL\s*:\s*"
-    r"(COMPRA|VENDA|NEUTRO)",
-    re.IGNORECASE,
+app.config.update(
+    TEMPLATES_AUTO_RELOAD=False,
 )
 
 
 def formatar_dados_para_ia(
     ticker: str,
     indicadores: dict,
+    analise: dict,
 ) -> str:
-    ticker_exibicao = ticker.removesuffix(".SA")
+    ticker_exibicao = ticker.removesuffix(
+        ".SA"
+    )
+
+    motivos = "\n".join(
+        f"- {motivo}"
+        for motivo in analise["motivos"]
+    )
+
+    alertas = (
+        "\n".join(
+            f"- {alerta}"
+            for alerta in analise["alertas"]
+        )
+        or "- Nenhum alerta adicional."
+    )
+
+    preco_referencia = (
+        f"R$ {analise['preco_referencia']:.2f}"
+        if analise["preco_referencia"]
+        is not None
+        else "Não aplicável"
+    )
+
+    stop = (
+        f"R$ {analise['stop']:.2f}"
+        if analise["stop"] is not None
+        else "Não aplicável"
+    )
+
+    alvo = (
+        f"R$ {analise['alvo']:.2f}"
+        if analise["alvo"] is not None
+        else "Não aplicável"
+    )
+
+    risco_retorno = (
+        f"{analise['risco_retorno']:.2f}"
+        if analise["risco_retorno"]
+        is not None
+        else "Não aplicável"
+    )
 
     return f"""Ticker: {ticker_exibicao}
-Data da análise: {datetime.now():%d/%m/%Y %H:%M}
-Preço de fechamento: R$ {indicadores['preco']:.2f}
-Variação do último pregão: {indicadores['variacao_dia']:.2%}
+Data: {datetime.now():%d/%m/%Y %H:%M}
+
+SINAL FIXO DO SISTEMA: {analise['sinal']}
+Pontuação: {analise['pontos']}
+Confiança: {analise['confianca']}
+
+Preço: R$ {indicadores['preco']:.2f}
+Variação diária: {indicadores['variacao_dia']:.2%}
+Retorno em 20 pregões: {indicadores['retorno20']:.2%}
+Retorno em 60 pregões: {indicadores['retorno60']:.2%}
+
 EMA 9: {indicadores['ema9']:.2f}
 EMA 21: {indicadores['ema21']:.2f}
 SMA 50: {indicadores['sma50']:.2f}
-Tendência curta: {indicadores['tendencia_curta']}
+SMA 200: {indicadores['sma200']:.2f}
+
 RSI 14: {indicadores['rsi14']:.2f}
 MACD: {indicadores['macd']:.4f}
 Sinal do MACD: {indicadores['macd_sinal']:.4f}
 Histograma do MACD: {indicadores['macd_histograma']:.4f}
-Estado do MACD: {indicadores['macd_status']}
-Volatilidade anualizada de 20 pregões: {indicadores['volatilidade20']:.2%}
+
+ATR 14: {indicadores['atr14']:.2f}
+Volatilidade anualizada: {indicadores['volatilidade20']:.2%}
+
+Volume atual: {indicadores['volume']:.0f}
+Volume médio de 20 pregões: {indicadores['volume_medio20']:.0f}
+Razão de volume: {indicadores['volume_ratio']:.2f}
+
 Suporte de 20 pregões: R$ {indicadores['suporte20']:.2f}
 Resistência de 20 pregões: R$ {indicadores['resistencia20']:.2f}
-Volume do último pregão: {indicadores['volume']:.0f}
-Volume médio de 20 pregões: {indicadores['volume_medio20']:.0f}"""
+
+Preço de referência: {preco_referencia}
+Stop técnico: {stop}
+Alvo técnico: {alvo}
+Relação risco-retorno: {risco_retorno}
+
+Motivos:
+{motivos}
+
+Alertas:
+{alertas}
+"""
 
 
 @app.get("/")
 def index():
-    return render_template("index.html")
+    return render_template(
+        "index.html"
+    )
 
 
 @app.get("/health")
 def health():
     return {
         "status": "ok",
+        "motor_sinal": "ativo",
     }, 200
 
 
@@ -105,7 +182,15 @@ def gerar_relatorio():
         .upper()
     )
 
-    if not TICKER_PATTERN.fullmatch(ticker):
+    import re
+
+    ticker_pattern = re.compile(
+        r"^[A-Z0-9]{4,6}(\.SA)?$"
+    )
+
+    if not ticker_pattern.fullmatch(
+        ticker
+    ):
         return render_template(
             "relatorio.html",
             error="Ticker inválido.",
@@ -116,12 +201,17 @@ def gerar_relatorio():
 
     inicio_mercado = time.perf_counter()
 
-    dados, erro = buscar_dados_ativo(ticker)
+    dados, erro = buscar_dados_ativo(
+        ticker
+    )
 
     logger.info(
         "Yahoo Finance %s: %.2fs",
         ticker,
-        time.perf_counter() - inicio_mercado,
+        (
+            time.perf_counter()
+            - inicio_mercado
+        ),
     )
 
     if erro:
@@ -135,16 +225,31 @@ def gerar_relatorio():
             dados["historico"]
         )
 
+        analise = calcular_sinal_tecnico(
+            indicadores
+        )
+
+        logger.info(
+            (
+                "Sinal %s: %s | "
+                "pontos=%s | confiança=%s"
+            ),
+            ticker,
+            analise["sinal"],
+            analise["pontos"],
+            analise["confianca"],
+        )
+
         dados_ia = formatar_dados_para_ia(
             ticker,
             indicadores,
+            analise,
         )
 
-        prompt_path = (
-            BASE_DIR / "prompt_analise.txt"
-        )
-
-        prompt_base = prompt_path.read_text(
+        prompt_base = (
+            BASE_DIR
+            / "prompt_analise.txt"
+        ).read_text(
             encoding="utf-8"
         )
 
@@ -155,13 +260,43 @@ def gerar_relatorio():
 
         inicio_ia = time.perf_counter()
 
-        texto = gerar_relatorio_ia(prompt)
+        origem_relatorio = "Gemini"
 
-        logger.info(
-            "Gemini %s: %.2fs",
-            ticker,
-            time.perf_counter() - inicio_ia,
-        )
+        try:
+            texto = gerar_relatorio_ia(
+                prompt
+            )
+
+            logger.info(
+                "Gemini %s: %.2fs",
+                ticker,
+               (
+                    time.perf_counter()
+                    - inicio_ia
+                ),
+            )
+
+        except Exception as erro_ia:
+            origem_relatorio = "motor local"
+
+            logger.warning(
+                (
+                    "Gemini indisponível para %s. "
+                    "Usando relatório local. "
+                    "Erro: %s: %s"
+                ),
+                ticker,
+                type(erro_ia).__name__,
+                erro_ia,
+            )
+
+            texto = gerar_relatorio_local(
+                ticker=ticker.removesuffix(
+                    ".SA"
+                ),
+                indicadores=indicadores,
+                analise=analise,
+            )
 
         html = markdown2.markdown(
             texto,
@@ -169,29 +304,32 @@ def gerar_relatorio():
             safe_mode="escape",
         )
 
-        match = SINAL_PATTERN.search(texto)
-
-        sinal = (
-            match.group(1).upper()
-            if match
-            else "SEM SINAL"
-        )
-
         enviar_para_telegram(
             ticker.removesuffix(".SA"),
-            sinal,
+            analise["sinal"],
+        )
+
+        tempo_total = (
+            time.perf_counter()
+            - inicio_total
         )
 
         logger.info(
             "Análise total %s: %.2fs",
             ticker,
-            time.perf_counter() - inicio_total,
+            tempo_total,
         )
 
         return render_template(
             "relatorio.html",
             relatorio=html,
-            ticker=ticker.removesuffix(".SA"),
+            ticker=ticker.removesuffix(
+                ".SA"
+            ),
+            analise=analise,
+            indicadores=indicadores,
+            tempo_total=tempo_total,
+            origem_relatorio=origem_relatorio,
         )
 
     except Exception:

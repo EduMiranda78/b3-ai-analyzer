@@ -1,64 +1,134 @@
 import main
 
 
-def _indicadores_validos():
+def indicadores_validos():
     return {
-        "preco": 40.25,
-        "variacao_dia": 0.012,
-        "ema9": 39.80,
-        "ema21": 38.90,
-        "sma50": 37.50,
-        "rsi14": 58.20,
-        "macd": 0.65,
-        "macd_sinal": 0.45,
-        "macd_histograma": 0.20,
-        "volatilidade20": 0.28,
-        "suporte20": 36.90,
-        "resistencia20": 41.40,
-        "volume": 12_000_000,
-        "volume_medio20": 10_000_000,
+        "preco": 110.0,
+        "variacao_dia": 0.01,
+        "ema9": 108.0,
+        "ema21": 105.0,
+        "sma50": 100.0,
+        "sma200": 92.0,
+        "rsi14": 61.0,
+        "macd": 1.2,
+        "macd_sinal": 0.8,
+        "macd_histograma": 0.4,
+        "atr14": 3.0,
+        "volatilidade20": 0.25,
+        "suporte20": 102.0,
+        "resistencia20": 125.0,
+        "volume": 1_400_000.0,
+        "volume_medio20": 1_000_000.0,
+        "volume_ratio": 1.4,
+        "retorno20": 0.08,
+        "retorno60": 0.15,
+        "distancia_suporte": 0.07,
+        "distancia_resistencia": 0.14,
         "tendencia_curta": "alta",
         "macd_status": "positivo",
     }
 
 
-def test_health(client):
-    response = client.get("/health")
-
-    assert response.status_code == 200
-    assert response.get_json() == {
-        "status": "ok",
+def analise_compra():
+    return {
+        "sinal": "COMPRA",
+        "pontos": 7,
+        "confianca": "ALTA",
+        "preco_referencia": 110.0,
+        "stop": 104.0,
+        "alvo": 125.0,
+        "risco_retorno": 2.5,
+        "motivos": [
+            "Preço acima das médias.",
+            "MACD positivo.",
+        ],
+        "alertas": [],
     }
 
 
+def preparar_dependencias(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        main,
+        "buscar_dados_ativo",
+        lambda ticker: (
+            {
+                "historico": object(),
+            },
+            None,
+        ),
+    )
+
+    monkeypatch.setattr(
+        main,
+        "calcular_indicadores",
+        lambda historico: (
+            indicadores_validos()
+        ),
+    )
+
+    monkeypatch.setattr(
+        main,
+        "calcular_sinal_tecnico",
+        lambda indicadores: (
+            analise_compra()
+        ),
+    )
+
+    monkeypatch.setattr(
+        main,
+        "enviar_para_telegram",
+        lambda ticker, sinal: True,
+    )
+
+
+def test_health(client):
+    resposta = client.get(
+        "/health"
+    )
+
+    assert resposta.status_code == 200
+
+    dados = resposta.get_json()
+
+    assert dados["status"] == "ok"
+    assert dados["motor_sinal"] == "ativo"
+
+
 def test_pagina_inicial(client):
-    response = client.get("/")
+    resposta = client.get("/")
 
-    assert response.status_code == 200
+    assert resposta.status_code == 200
 
-    conteudo = response.get_data(
+    html = resposta.get_data(
         as_text=True
     )
 
-    assert "Analisador de Mercado" in conteudo
-    assert 'name="ticker"' in conteudo
+    assert "Analisador de Mercado" in html
+    assert 'name="ticker"' in html
 
 
-def test_rejeita_ticker_invalido(client):
-    response = client.post(
+def test_rejeita_ticker_invalido(
+    client,
+):
+    resposta = client.post(
         "/gerar_relatorio",
         data={
             "ticker": "@@@",
         },
     )
 
-    assert response.status_code == 400
-    assert "Ticker inválido" in response.get_data(
-        as_text=True
+    assert resposta.status_code == 400
+
+    assert "Ticker inválido" in (
+        resposta.get_data(
+            as_text=True
+        )
     )
 
 
-def test_erro_na_consulta_de_mercado(
+def test_erro_de_mercado(
     client,
     monkeypatch,
 ):
@@ -67,89 +137,97 @@ def test_erro_na_consulta_de_mercado(
         "buscar_dados_ativo",
         lambda ticker: (
             None,
-            "Falha simulada na consulta.",
+            "Falha simulada.",
         ),
     )
 
-    response = client.post(
+    resposta = client.post(
         "/gerar_relatorio",
         data={
             "ticker": "PETR4",
         },
     )
 
-    assert response.status_code == 502
-    assert "Falha simulada" in response.get_data(
-        as_text=True
+    assert resposta.status_code == 502
+    assert "Falha simulada" in (
+        resposta.get_data(
+            as_text=True
+        )
     )
 
 
-def test_relatorio_com_sucesso(
+def test_relatorio_com_gemini(
     client,
     monkeypatch,
 ):
-    chamadas = {
-        "ticker": None,
-        "telegram": [],
-    }
-
-    def buscar_dados(ticker):
-        chamadas["ticker"] = ticker
-
-        return {
-            "historico": object(),
-        }, None
-
-    monkeypatch.setattr(
-        main,
-        "buscar_dados_ativo",
-        buscar_dados,
-    )
-
-    monkeypatch.setattr(
-        main,
-        "calcular_indicadores",
-        lambda historico: _indicadores_validos(),
+    preparar_dependencias(
+        monkeypatch
     )
 
     monkeypatch.setattr(
         main,
         "gerar_relatorio_ia",
         lambda prompt: (
-            "## Resumo técnico\n\n"
-            "Tendência de alta.\n\n"
+            "## Leitura técnica\n\n"
+            "Tendência compradora.\n\n"
             "## SINALIZAÇÃO FINAL: COMPRA\n\n"
-            "Justificativa: médias alinhadas."
+            "Justificativa: médias positivas."
         ),
     )
 
-    monkeypatch.setattr(
-        main,
-        "enviar_para_telegram",
-        lambda ticker, sinal: chamadas[
-            "telegram"
-        ].append(
-            (ticker, sinal)
-        ),
-    )
-
-    response = client.post(
+    resposta = client.post(
         "/gerar_relatorio",
         data={
-            "ticker": "petr4",
+            "ticker": "PETR4",
         },
     )
 
-    conteudo = response.get_data(
+    html = resposta.get_data(
         as_text=True
     )
 
-    assert response.status_code == 200
-    assert "Resumo técnico" in conteudo
-    assert "COMPRA" in conteudo
+    assert resposta.status_code == 200
+    assert "PETR4" in html
+    assert "COMPRA" in html
 
-    assert chamadas["ticker"] == "PETR4.SA"
+    assert (
+        "motor técnico local"
+        not in html
+    )
 
-    assert chamadas["telegram"] == [
-        ("PETR4", "COMPRA"),
-    ]
+
+def test_relatorio_local_quando_gemini_falha(
+    client,
+    monkeypatch,
+):
+    preparar_dependencias(
+        monkeypatch
+    )
+
+    def falhar(prompt):
+        raise ConnectionError(
+            "Falha simulada no Gemini."
+        )
+
+    monkeypatch.setattr(
+        main,
+        "gerar_relatorio_ia",
+        falhar,
+    )
+
+    resposta = client.post(
+        "/gerar_relatorio",
+        data={
+            "ticker": "PETR4",
+        },
+    )
+
+    html = resposta.get_data(
+        as_text=True
+    )
+
+    assert resposta.status_code == 200
+    assert "PETR4" in html
+    assert "COMPRA" in html
+    assert "motor técnico local" in html
+    assert "Plano técnico" in html
