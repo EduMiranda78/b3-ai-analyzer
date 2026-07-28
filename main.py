@@ -34,6 +34,10 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
 )
 
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
+logging.getLogger("google_genai").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)

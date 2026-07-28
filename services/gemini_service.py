@@ -1,29 +1,34 @@
 import os
+from functools import lru_cache
 
 from google import genai
 from google.genai import types
 
 
-API_KEY = os.getenv("GOOGLE_API_KEY")
+@lru_cache(maxsize=1)
+def _obter_cliente():
+    api_key = os.getenv("GOOGLE_API_KEY")
 
-MODEL_NAME = os.getenv(
-    "GEMINI_MODEL",
-    "gemini-2.5-flash",
-)
+    if not api_key:
+        raise RuntimeError(
+            "GOOGLE_API_KEY não configurada."
+        )
 
-if not API_KEY:
-    raise RuntimeError(
-        "GOOGLE_API_KEY não configurada"
+    return genai.Client(
+        api_key=api_key,
     )
-
-client = genai.Client(
-    api_key=API_KEY,
-)
 
 
 def gerar_relatorio(prompt: str) -> str:
-    response = client.models.generate_content(
-        model=MODEL_NAME,
+    modelo = os.getenv(
+        "GEMINI_MODEL",
+        "gemini-2.5-flash",
+    )
+
+    cliente = _obter_cliente()
+
+    response = cliente.models.generate_content(
+        model=modelo,
         contents=prompt,
         config=types.GenerateContentConfig(
             temperature=0.1,
