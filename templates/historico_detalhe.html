@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        Histórico {{ item.ticker }}
+    </title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/style.css') }}"
+    >
+</head>
+
+<body class="report-page">
+
+    <main class="history-container">
+
+        <header class="history-header">
+
+            <div>
+                <p class="report-kicker">
+                    Análise registrada
+                </p>
+
+                <h1>{{ item.ticker }}</h1>
+
+                <p>
+                    {{ item.created_at[8:10] }}/{{ item.created_at[5:7] }}/{{ item.created_at[0:4] }}
+                    às {{ item.created_at[11:16] }}
+                </p>
+            </div>
+
+            <div class="history-actions">
+
+                <a
+                    href="/historico?ticker={{ item.ticker }}"
+                    class="btn-secondary"
+                >
+                    Histórico do ticker
+                </a>
+
+                <a
+                    href="/"
+                    class="btn-primary"
+                >
+                    Nova análise
+                </a>
+
+            </div>
+
+        </header>
+
+        <section class="signal-summary">
+
+            <div class="metric-card">
+                <span>Sinal</span>
+
+                <strong>
+                    {{ item.signal }}
+                </strong>
+            </div>
+
+            <div class="metric-card">
+                <span>Pontuação</span>
+
+                <strong>
+                    {{ item.score }}
+                </strong>
+            </div>
+
+            <div class="metric-card">
+                <span>Confiança</span>
+
+                <strong>
+                    {{ item.confidence }}
+                </strong>
+            </div>
+
+            <div class="metric-card">
+                <span>Preço</span>
+
+                <strong>
+                    R$ {{ "%.2f"|format(item.price) }}
+                </strong>
+            </div>
+
+        </section>
+
+        {% if comparacao %}
+
+        <section class="comparison-panel">
+
+            <h2>
+                Comparação com a análise anterior
+            </h2>
+
+            <div class="comparison-grid">
+
+                <div>
+                    <span>Sinal anterior</span>
+                    <strong>
+                        {{ comparacao.sinal_anterior }}
+                    </strong>
+                </div>
+
+                <div>
+                    <span>Mudança de sinal</span>
+                    <strong>
+                        {{ "Sim" if comparacao.mudou_sinal else "Não" }}
+                    </strong>
+                </div>
+
+                <div>
+                    <span>Variação de pontos</span>
+                    <strong>
+                        {{ "%+d"|format(comparacao.variacao_pontos) }}
+                    </strong>
+                </div>
+
+                <div>
+                    <span>Variação do preço</span>
+                    <strong>
+                        {{ "%+.2f"|format(comparacao.variacao_preco_percentual) }}%
+                    </strong>
+                </div>
+
+            </div>
+
+        </section>
+
+        {% endif %}
+
+        {% if item.reference_price is not none %}
+
+        <section class="trade-plan">
+
+            <h2>Plano registrado</h2>
+
+            <div class="trade-plan-grid">
+
+                <div>
+                    <span>Referência</span>
+
+                    <strong>
+                        R$ {{ "%.2f"|format(item.reference_price) }}
+                    </strong>
+                </div>
+
+                <div>
+                    <span>Stop</span>
+
+                    <strong>
+                        R$ {{ "%.2f"|format(item.stop_price) }}
+                    </strong>
+                </div>
+
+                <div>
+                    <span>Alvo</span>
+
+                    <strong>
+                        R$ {{ "%.2f"|format(item.target_price) }}
+                    </strong>
+                </div>
+
+                <div>
+                    <span>Risco-retorno</span>
+
+                    <strong>
+                        1 : {{ "%.2f"|format(item.risk_reward) }}
+                    </strong>
+                </div>
+
+            </div>
+
+        </section>
+
+        {% endif %}
+
+        <section class="history-metadata">
+
+            <div>
+                <span>Origem do texto</span>
+                <strong>{{ item.report_source }}</strong>
+            </div>
+
+            <div>
+                <span>Tempo total</span>
+                <strong>
+                    {{ "%.2f"|format(item.duration_seconds) }}s
+                </strong>
+            </div>
+
+            <div>
+                <span>RSI 14</span>
+                <strong>
+                    {{ "%.2f"|format(item.indicadores.rsi14) }}
+                </strong>
+            </div>
+
+            <div>
+                <span>Volume relativo</span>
+                <strong>
+                    {{ "%.2f"|format(item.indicadores.volume_ratio) }}
+                </strong>
+            </div>
+
+        </section>
+
+        <section class="report-content history-report">
+
+            {{ relatorio_html|safe }}
+
+        </section>
+
+    </main>
+
+</body>
+
+</html>

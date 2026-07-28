@@ -538,3 +538,168 @@ input:focus {
     font-size: 0.9rem;
     line-height: 1.5;
 }
+
+/* ===== HISTÓRICO ===== */
+
+.history-home-link {
+    display: inline-block;
+    margin: 4px 0 24px;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.history-container {
+    width: min(1180px, calc(100% - 32px));
+    margin: 32px auto;
+}
+
+.history-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 26px;
+}
+
+.history-header h1 {
+    margin: 0 0 8px;
+}
+
+.history-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.history-filter {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 22px;
+}
+
+.history-filter input {
+    flex: 1;
+    min-width: 180px;
+}
+
+.history-stats {
+    display: grid;
+    grid-template-columns:
+        repeat(5, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.history-table-wrapper {
+    overflow-x: auto;
+    border: 1px solid
+        rgba(128, 128, 128, 0.25);
+    border-radius: 12px;
+}
+
+.history-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.history-table th,
+.history-table td {
+    padding: 14px;
+    border-bottom: 1px solid
+        rgba(128, 128, 128, 0.18);
+    text-align: left;
+    white-space: nowrap;
+}
+
+.history-table th {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    opacity: 0.7;
+}
+
+.history-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.table-signal {
+    display: inline-block;
+    min-width: 84px;
+    padding: 7px 10px;
+    border-radius: 7px;
+    text-align: center;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.history-detail-link {
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.history-empty {
+    padding: 34px;
+    border: 1px solid
+        rgba(128, 128, 128, 0.25);
+    border-radius: 12px;
+    text-align: center;
+}
+
+.comparison-panel {
+    margin: 24px 0;
+    padding: 20px;
+    border: 1px solid
+        rgba(128, 128, 128, 0.25);
+    border-radius: 12px;
+}
+
+.comparison-panel h2 {
+    margin-top: 0;
+}
+
+.comparison-grid,
+.history-metadata {
+    display: grid;
+    grid-template-columns:
+        repeat(4, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.comparison-grid span,
+.history-metadata span {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.82rem;
+    opacity: 0.7;
+}
+
+.history-metadata {
+    margin: 24px 0;
+    padding: 20px;
+    border: 1px solid
+        rgba(128, 128, 128, 0.25);
+    border-radius: 12px;
+}
+
+.history-report {
+    margin-top: 24px;
+}
+
+@media (max-width: 800px) {
+    .history-header {
+        flex-direction: column;
+    }
+
+    .history-filter {
+        flex-direction: column;
+    }
+
+    .history-stats {
+        grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+    }
+
+    .comparison-grid,
+    .history-metadata {
+        grid-template-columns: 1fr;
+    }
+}

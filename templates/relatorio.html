@@ -229,6 +229,18 @@
                     Nova consulta
                 </a>
 
+                {% if analise_id %}
+
+                <a
+                    href="/historico/{{ analise_id }}"
+                    class="btn-secondary"
+                >
+                    Abrir análise salva
+                </a>
+
+                {% endif %}
+
+
                 <button
                     onclick="window.print()"
                     class="btn-primary"

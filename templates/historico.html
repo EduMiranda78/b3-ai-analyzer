@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Histórico de análises</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/style.css') }}"
+    >
+</head>
+
+<body class="report-page">
+
+    <main class="history-container">
+
+        <header class="history-header">
+
+            <div>
+                <p class="report-kicker">
+                    Analisador de mercado
+                </p>
+
+                <h1>Histórico de análises</h1>
+
+                <p>
+                    Consulte os sinais registrados
+                    e acompanhe suas alterações.
+                </p>
+            </div>
+
+            <a
+                href="/"
+                class="btn-secondary"
+            >
+                Nova análise
+            </a>
+
+        </header>
+
+        <form
+            method="GET"
+            action="/historico"
+            class="history-filter"
+        >
+
+            <input
+                type="text"
+                name="ticker"
+                value="{{ ticker_filtro }}"
+                placeholder="Filtrar ticker, exemplo PETR4"
+                maxlength="6"
+            >
+
+            <button
+                type="submit"
+                class="btn-primary"
+            >
+                Filtrar
+            </button>
+
+            {% if ticker_filtro %}
+
+            <a
+                href="/historico"
+                class="btn-secondary"
+            >
+                Limpar
+            </a>
+
+            {% endif %}
+
+        </form>
+
+        <section class="history-stats">
+
+            <div class="metric-card">
+                <span>Análises</span>
+                <strong>{{ estatisticas.total }}</strong>
+            </div>
+
+            <div class="metric-card">
+                <span>Tickers</span>
+                <strong>{{ estatisticas.tickers }}</strong>
+            </div>
+
+            <div class="metric-card">
+                <span>Compra</span>
+                <strong>{{ estatisticas.compras }}</strong>
+            </div>
+
+            <div class="metric-card">
+                <span>Venda</span>
+                <strong>{{ estatisticas.vendas }}</strong>
+            </div>
+
+            <div class="metric-card">
+                <span>Neutro</span>
+                <strong>{{ estatisticas.neutros }}</strong>
+            </div>
+
+        </section>
+
+        {% if analises %}
+
+        <div class="history-table-wrapper">
+
+            <table class="history-table">
+
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Ticker</th>
+                        <th>Sinal</th>
+                        <th>Pontos</th>
+                        <th>Confiança</th>
+                        <th>Preço</th>
+                        <th>Origem</th>
+                        <th></th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    {% for item in analises %}
+
+                    <tr>
+                        <td>
+                            {{ item.created_at[8:10] }}/{{ item.created_at[5:7] }}/{{ item.created_at[0:4] }}
+                            {{ item.created_at[11:16] }}
+                        </td>
+
+                        <td>
+                            <strong>{{ item.ticker }}</strong>
+                        </td>
+
+                        <td>
+                            <span
+                                class="table-signal signal-{{ item.signal|lower }}"
+                            >
+                                {{ item.signal }}
+                            </span>
+                        </td>
+
+                        <td>{{ item.score }}</td>
+
+                        <td>{{ item.confidence }}</td>
+
+                        <td>
+                            R$ {{ "%.2f"|format(item.price) }}
+                        </td>
+
+                        <td>{{ item.report_source }}</td>
+
+                        <td>
+                            <a
+                                href="/historico/{{ item.id }}"
+                                class="history-detail-link"
+                            >
+                                Abrir
+                            </a>
+                        </td>
+                    </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+        {% else %}
+
+        <div class="history-empty">
+
+            Nenhuma análise foi registrada
+            para esse filtro.
+
+        </div>
+
+        {% endif %}
+
+    </main>
+
+</body>
+
+</html>

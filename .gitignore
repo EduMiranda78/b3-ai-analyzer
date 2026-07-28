@@ -1,24 +1,25 @@
 
+!.env.example
+# Ambientes virtuais
+# Arquivos locais
+# Backups locais
+# Banco local
+# Python
 # Variáveis e credenciais
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.py[cod]
+.DS_Store
 .env
 .env.*
-!.env.example
-
-# Python
-__pycache__/
-*.py[cod]
-.pytest_cache/
 .mypy_cache/
+.pytest_cache/
 .ruff_cache/
-
-# Ambientes virtuais
-venv/
 .venv/
-env/
-
-# Arquivos locais
-*.log
-.DS_Store
-
-# Backups locais
+__pycache__/
 backup_*/
+env/
+instance/
+venv/

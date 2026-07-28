@@ -78,6 +78,12 @@ def preparar_dependencias(
 
     monkeypatch.setattr(
         main,
+        "salvar_analise",
+        lambda **kwargs: 1,
+    )
+
+    monkeypatch.setattr(
+        main,
         "enviar_para_telegram",
         lambda ticker, sinal: True,
     )

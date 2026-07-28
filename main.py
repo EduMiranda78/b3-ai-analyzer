@@ -1,11 +1,12 @@
 import logging
+import re
 import time
 from datetime import datetime
 from pathlib import Path
 
 import markdown2
 from dotenv import load_dotenv
-from flask import Flask, render_template, request
+from flask import Flask, abort, render_template, request
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -16,6 +17,14 @@ load_dotenv(
 
 from services.gemini_service import (
     gerar_relatorio as gerar_relatorio_ia,
+)
+from services.history_service import (
+    inicializar_banco,
+    listar_analises,
+    obter_analise,
+    obter_anterior,
+    obter_estatisticas,
+    salvar_analise,
 )
 from services.indicators_service import (
     calcular_indicadores,
@@ -61,6 +70,8 @@ app = Flask(__name__)
 app.config.update(
     TEMPLATES_AUTO_RELOAD=False,
 )
+
+inicializar_banco()
 
 
 def formatar_dados_para_ia(
@@ -169,6 +180,106 @@ def health():
         "status": "ok",
         "motor_sinal": "ativo",
     }, 200
+
+
+@app.get("/historico")
+def historico():
+    ticker = (
+        request.args
+        .get("ticker", "")
+        .strip()
+        .upper()
+        .removesuffix(".SA")
+    )
+
+    if ticker and not re.fullmatch(
+        r"[A-Z0-9]{4,6}",
+        ticker,
+    ):
+        ticker = ""
+
+    analises = listar_analises(
+        ticker=ticker or None,
+        limite=200,
+    )
+
+    estatisticas = obter_estatisticas(
+        ticker=ticker or None,
+    )
+
+    return render_template(
+        "historico.html",
+        analises=analises,
+        estatisticas=estatisticas,
+        ticker_filtro=ticker,
+    )
+
+
+@app.get("/historico/<int:analise_id>")
+def historico_detalhe(
+    analise_id: int,
+):
+    item = obter_analise(
+        analise_id
+    )
+
+    if item is None:
+        abort(404)
+
+    anterior = obter_anterior(
+        item["ticker"],
+        item["id"],
+    )
+
+    comparacao = None
+
+    if anterior is not None:
+        preco_anterior = float(
+            anterior["price"]
+        )
+
+        preco_atual = float(
+            item["price"]
+        )
+
+        variacao_preco = (
+            (
+                preco_atual
+                / preco_anterior
+            )
+            - 1
+        ) * 100 if preco_anterior else 0.0
+
+        comparacao = {
+            "sinal_anterior": anterior[
+                "signal"
+            ],
+            "mudou_sinal": (
+                anterior["signal"]
+                != item["signal"]
+            ),
+            "variacao_pontos": (
+                int(item["score"])
+                - int(anterior["score"])
+            ),
+            "variacao_preco_percentual": (
+                variacao_preco
+            ),
+        }
+
+    relatorio_html = markdown2.markdown(
+        item["report_markdown"],
+        extras=["tables"],
+        safe_mode="escape",
+    )
+
+    return render_template(
+        "historico_detalhe.html",
+        item=item,
+        anterior=anterior,
+        comparacao=comparacao,
+        relatorio_html=relatorio_html,
+    )
 
 
 @app.post("/gerar_relatorio")
@@ -320,6 +431,32 @@ def gerar_relatorio():
             tempo_total,
         )
 
+        analise_id = None
+
+        try:
+            analise_id = salvar_analise(
+                ticker=ticker.removesuffix(
+                    ".SA"
+                ),
+                indicadores=indicadores,
+                analise=analise,
+                origem_relatorio=origem_relatorio,
+                tempo_total=tempo_total,
+                relatorio_markdown=texto,
+            )
+
+            logger.info(
+                "Análise %s salva com ID %s",
+                ticker,
+                analise_id,
+            )
+
+        except Exception:
+            logger.exception(
+                "Falha ao salvar histórico de %s",
+                ticker,
+            )
+
         return render_template(
             "relatorio.html",
             relatorio=html,
@@ -330,6 +467,7 @@ def gerar_relatorio():
             indicadores=indicadores,
             tempo_total=tempo_total,
             origem_relatorio=origem_relatorio,
+            analise_id=analise_id,
         )
 
     except Exception:

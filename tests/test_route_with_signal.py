@@ -64,6 +64,12 @@ def test_relatorio_exibe_motor_de_sinal(
 
     monkeypatch.setattr(
         main,
+        "salvar_analise",
+        lambda **kwargs: 1,
+    )
+
+    monkeypatch.setattr(
+        main,
         "enviar_para_telegram",
         lambda ticker, sinal: True,
     )
