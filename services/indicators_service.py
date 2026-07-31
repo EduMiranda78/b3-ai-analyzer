@@ -6,12 +6,35 @@ import pandas as pd
 
 def _numero(valor, padrao=0.0):
     if valor is None or pd.isna(valor):
-        return padrao
+        return float(padrao)
 
     return float(valor)
 
 
-def calcular_indicadores(df: pd.DataFrame) -> dict:
+def _retorno_periodo(
+    fechamento: pd.Series,
+    periodo: int,
+) -> float:
+    if len(fechamento) <= periodo:
+        return 0.0
+
+    anterior = _numero(
+        fechamento.iloc[-periodo - 1]
+    )
+
+    atual = _numero(
+        fechamento.iloc[-1]
+    )
+
+    if anterior == 0:
+        return 0.0
+
+    return (atual / anterior) - 1
+
+
+def calcular_indicadores(
+    df: pd.DataFrame,
+) -> dict:
     dados = df.copy()
 
     fechamento = pd.to_numeric(
@@ -24,6 +47,27 @@ def calcular_indicadores(df: pd.DataFrame) -> dict:
             "Histórico insuficiente para os indicadores."
         )
 
+    maximo = pd.to_numeric(
+        dados["High"],
+        errors="coerce",
+    ).reindex(
+        fechamento.index
+    )
+
+    minimo = pd.to_numeric(
+        dados["Low"],
+        errors="coerce",
+    ).reindex(
+        fechamento.index
+    )
+
+    volume = pd.to_numeric(
+        dados["Volume"],
+        errors="coerce",
+    ).reindex(
+        fechamento.index
+    ).fillna(0.0)
+
     ema9 = fechamento.ewm(
         span=9,
         adjust=False,
@@ -34,7 +78,15 @@ def calcular_indicadores(df: pd.DataFrame) -> dict:
         adjust=False,
     ).mean()
 
-    sma50 = fechamento.rolling(50).mean()
+    sma50 = fechamento.rolling(
+        50,
+        min_periods=1,
+    ).mean()
+
+    sma200 = fechamento.rolling(
+        200,
+        min_periods=1,
+    ).mean()
 
     ema12 = fechamento.ewm(
         span=12,
@@ -57,8 +109,13 @@ def calcular_indicadores(df: pd.DataFrame) -> dict:
 
     delta = fechamento.diff()
 
-    ganhos = delta.clip(lower=0)
-    perdas = -delta.clip(upper=0)
+    ganhos = delta.clip(
+        lower=0
+    )
+
+    perdas = -delta.clip(
+        upper=0
+    )
 
     ganho_medio = ganhos.ewm(
         alpha=1 / 14,
@@ -72,60 +129,100 @@ def calcular_indicadores(df: pd.DataFrame) -> dict:
         adjust=False,
     ).mean()
 
-    rs = ganho_medio / perda_media.replace(0, np.nan)
+    rs = ganho_medio / perda_media.replace(
+        0,
+        np.nan,
+    )
 
-    rsi = 100 - (100 / (1 + rs))
+    rsi = 100 - (
+        100 / (1 + rs)
+    )
 
     rsi = rsi.mask(
-        (ganho_medio == 0) & (perda_media == 0),
+        (ganho_medio == 0)
+        & (perda_media == 0),
         50,
     )
 
     rsi = rsi.mask(
-        (perda_media == 0) & (ganho_medio > 0),
+        (perda_media == 0)
+        & (ganho_medio > 0),
         100,
     )
 
     rsi = rsi.mask(
-        (ganho_medio == 0) & (perda_media > 0),
+        (ganho_medio == 0)
+        & (perda_media > 0),
         0,
     )
+
+    fechamento_anterior = fechamento.shift(
+        1
+    )
+
+    true_range = pd.concat(
+        [
+            (maximo - minimo).abs(),
+            (maximo - fechamento_anterior).abs(),
+            (minimo - fechamento_anterior).abs(),
+        ],
+        axis=1,
+    ).max(
+        axis=1
+    )
+
+    atr14 = true_range.ewm(
+        alpha=1 / 14,
+        min_periods=14,
+        adjust=False,
+    ).mean()
 
     retornos = fechamento.pct_change()
 
     volatilidade = (
         retornos
-        .rolling(20)
+        .rolling(
+            20,
+            min_periods=2,
+        )
         .std()
         * math.sqrt(252)
     )
 
-    maximo20 = (
-        pd.to_numeric(
-            dados["High"],
-            errors="coerce",
+    suporte20 = (
+        minimo
+        .rolling(
+            20,
+            min_periods=1,
         )
-        .rolling(20)
-        .max()
-    )
-
-    minimo20 = (
-        pd.to_numeric(
-            dados["Low"],
-            errors="coerce",
-        )
-        .rolling(20)
         .min()
+        .shift(1)
     )
 
-    volume = pd.to_numeric(
-        dados["Volume"],
-        errors="coerce",
+    resistencia20 = (
+        maximo
+        .rolling(
+            20,
+            min_periods=1,
+        )
+        .max()
+        .shift(1)
     )
 
-    volume_medio20 = volume.rolling(20).mean()
+    volume_medio20 = (
+        volume
+        .rolling(
+            20,
+            min_periods=1,
+        )
+        .mean()
+        .shift(1)
+    )
 
-    preco = _numero(fechamento.iloc[-1])
+    preco = _numero(
+        fechamento.iloc[-1]
+    )
+
     preco_anterior = _numero(
         fechamento.iloc[-2],
         preco,
@@ -137,12 +234,54 @@ def calcular_indicadores(df: pd.DataFrame) -> dict:
         else 0.0
     )
 
-    ema9_atual = _numero(ema9.iloc[-1])
-    ema21_atual = _numero(ema21.iloc[-1])
+    ema9_atual = _numero(
+        ema9.iloc[-1]
+    )
 
-    macd_atual = _numero(macd.iloc[-1])
+    ema21_atual = _numero(
+        ema21.iloc[-1]
+    )
+
+    macd_atual = _numero(
+        macd.iloc[-1]
+    )
+
     macd_sinal_atual = _numero(
         macd_sinal.iloc[-1]
+    )
+
+    suporte_atual = _numero(
+        suporte20.iloc[-1]
+    )
+
+    resistencia_atual = _numero(
+        resistencia20.iloc[-1]
+    )
+
+    volume_atual = _numero(
+        volume.iloc[-1]
+    )
+
+    volume_medio_atual = _numero(
+        volume_medio20.iloc[-1]
+    )
+
+    volume_ratio = (
+        volume_atual / volume_medio_atual
+        if volume_medio_atual > 0
+        else 0.0
+    )
+
+    distancia_suporte = (
+        (preco - suporte_atual) / preco
+        if preco > 0 and suporte_atual > 0
+        else 0.0
+    )
+
+    distancia_resistencia = (
+        (resistencia_atual - preco) / preco
+        if preco > 0 and resistencia_atual > 0
+        else 0.0
     )
 
     return {
@@ -150,26 +289,42 @@ def calcular_indicadores(df: pd.DataFrame) -> dict:
         "variacao_dia": variacao_dia,
         "ema9": ema9_atual,
         "ema21": ema21_atual,
-        "sma50": _numero(sma50.iloc[-1]),
-        "rsi14": _numero(rsi.iloc[-1], 50.0),
+        "sma50": _numero(
+            sma50.iloc[-1]
+        ),
+        "sma200": _numero(
+            sma200.iloc[-1]
+        ),
+        "rsi14": _numero(
+            rsi.iloc[-1],
+            50.0,
+        ),
         "macd": macd_atual,
         "macd_sinal": macd_sinal_atual,
         "macd_histograma": _numero(
             macd_histograma.iloc[-1]
         ),
+        "atr14": _numero(
+            atr14.iloc[-1]
+        ),
         "volatilidade20": _numero(
             volatilidade.iloc[-1]
         ),
-        "suporte20": _numero(
-            minimo20.iloc[-1]
+        "suporte20": suporte_atual,
+        "resistencia20": resistencia_atual,
+        "volume": volume_atual,
+        "volume_medio20": volume_medio_atual,
+        "volume_ratio": volume_ratio,
+        "retorno20": _retorno_periodo(
+            fechamento,
+            20,
         ),
-        "resistencia20": _numero(
-            maximo20.iloc[-1]
+        "retorno60": _retorno_periodo(
+            fechamento,
+            60,
         ),
-        "volume": _numero(volume.iloc[-1]),
-        "volume_medio20": _numero(
-            volume_medio20.iloc[-1]
-        ),
+        "distancia_suporte": distancia_suporte,
+        "distancia_resistencia": distancia_resistencia,
         "tendencia_curta": (
             "alta"
             if ema9_atual > ema21_atual
