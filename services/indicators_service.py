@@ -63,7 +63,7 @@ def calcular_indicadores(
     fechamento = fechamento[validos]
     maxima = maxima[validos]
     minima = minima[validos]
-    volume = volume[validos]
+    volume = volume[validos].fillna(0.0)
 
     if len(fechamento) < 60:
         raise ValueError(
@@ -71,27 +71,6 @@ def calcular_indicadores(
             "São necessários pelo menos "
             "60 pregões."
         )
-
-    maximo = pd.to_numeric(
-        dados["High"],
-        errors="coerce",
-    ).reindex(
-        fechamento.index
-    )
-
-    minimo = pd.to_numeric(
-        dados["Low"],
-        errors="coerce",
-    ).reindex(
-        fechamento.index
-    )
-
-    volume = pd.to_numeric(
-        dados["Volume"],
-        errors="coerce",
-    ).reindex(
-        fechamento.index
-    ).fillna(0.0)
 
     ema9 = fechamento.ewm(
         span=9,
@@ -262,6 +241,22 @@ def calcular_indicadores(
         else 0.0
     )
 
+    ema9_atual = _numero(
+        ema9.iloc[-1]
+    )
+
+    ema21_atual = _numero(
+        ema21.iloc[-1]
+    )
+
+    macd_atual = _numero(
+        macd.iloc[-1]
+    )
+
+    macd_sinal_atual = _numero(
+        macd_sinal.iloc[-1]
+    )
+
     media_volume = _numero(
         volume_medio20.iloc[-1]
     )
@@ -297,56 +292,6 @@ def calcular_indicadores(
         else 0.0
     )
 
-    ema9_atual = _numero(
-        ema9.iloc[-1]
-    )
-
-    ema21_atual = _numero(
-        ema21.iloc[-1]
-    )
-
-    macd_atual = _numero(
-        macd.iloc[-1]
-    )
-
-    macd_sinal_atual = _numero(
-        macd_sinal.iloc[-1]
-    )
-
-    suporte_atual = _numero(
-        suporte20.iloc[-1]
-    )
-
-    resistencia_atual = _numero(
-        resistencia20.iloc[-1]
-    )
-
-    volume_atual = _numero(
-        volume.iloc[-1]
-    )
-
-    volume_medio_atual = _numero(
-        volume_medio20.iloc[-1]
-    )
-
-    volume_ratio = (
-        volume_atual / volume_medio_atual
-        if volume_medio_atual > 0
-        else 0.0
-    )
-
-    distancia_suporte = (
-        (preco - suporte_atual) / preco
-        if preco > 0 and suporte_atual > 0
-        else 0.0
-    )
-
-    distancia_resistencia = (
-        (resistencia_atual - preco) / preco
-        if preco > 0 and resistencia_atual > 0
-        else 0.0
-    )
-
     return {
         "preco": preco,
         "variacao_dia": variacao_dia,
@@ -363,9 +308,7 @@ def calcular_indicadores(
             50.0,
         ),
         "macd": macd_atual,
-        "macd_sinal": (
-            macd_sinal_atual
-        ),
+        "macd_sinal": macd_sinal_atual,
         "macd_histograma": _numero(
             macd_histograma.iloc[-1]
         ),
@@ -389,12 +332,6 @@ def calcular_indicadores(
             fechamento
             .pct_change(60)
             .iloc[-1]
-        ),
-        "distancia_suporte": (
-            distancia_suporte
-        ),
-        "distancia_resistencia": (
-            distancia_resistencia
         ),
         "distancia_suporte": distancia_suporte,
         "distancia_resistencia": distancia_resistencia,
