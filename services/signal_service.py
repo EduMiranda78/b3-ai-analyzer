@@ -1,266 +1,322 @@
-import math
+from typing import Optional
 
 
-def _numero(valor, padrao=0.0):
-    try:
-        numero = float(valor)
-    except (TypeError, ValueError):
-        return float(padrao)
-
-    if not math.isfinite(numero):
-        return float(padrao)
-
-    return numero
-
-
-def _plano_operacional(
-    sinal: str,
-    indicadores: dict,
+def _arredondar(
+    valor: Optional[float],
+    casas: int = 2,
 ):
-    preco = _numero(
-        indicadores.get("preco")
+    if valor is None:
+        return None
+
+    return round(
+        float(valor),
+        casas,
     )
 
-    atr = max(
-        _numero(
-            indicadores.get("atr14")
-        ),
-        preco * 0.01,
+
+def _plano_compra(
+    preco: float,
+    suporte: float,
+    resistencia: float,
+    atr: float,
+    alertas: list[str],
+):
+    stop_limite = (
+        preco - (2 * atr)
     )
 
-    suporte = _numero(
-        indicadores.get("suporte20")
+    stop_estrutural = (
+        suporte - (0.25 * atr)
+        if 0 < suporte < preco
+        else stop_limite
     )
 
-    resistencia = _numero(
-        indicadores.get("resistencia20")
+    stop = max(
+        stop_limite,
+        stop_estrutural,
     )
 
-    if preco <= 0 or sinal == "NEUTRO":
-        return None, None, None, None
+    risco = preco - stop
 
-    if sinal == "COMPRA":
-        stop_atr = preco - (2 * atr)
+    if risco <= 0:
+        return None, None, None
 
-        stop = (
-            max(suporte, stop_atr)
-            if 0 < suporte < preco
-            else stop_atr
-        )
-
-        if stop >= preco:
-            stop = preco - max(
-                atr,
-                preco * 0.01,
-            )
-
-        risco = preco - stop
-        alvo_minimo = preco + (2 * risco)
-
-        alvo = (
-            max(resistencia, alvo_minimo)
-            if resistencia > preco
-            else alvo_minimo
-        )
-
-        retorno = alvo - preco
-
-    else:
-        stop_atr = preco + (2 * atr)
-
-        stop = (
-            min(resistencia, stop_atr)
-            if resistencia > preco
-            else stop_atr
-        )
-
-        if stop <= preco:
-            stop = preco + max(
-                atr,
-                preco * 0.01,
-            )
-
-        risco = stop - preco
-        alvo_maximo = preco - (2 * risco)
-
-        alvo = (
-            min(suporte, alvo_maximo)
-            if 0 < suporte < preco
-            else alvo_maximo
-        )
-
-        retorno = preco - alvo
-
-    if risco <= 0 or retorno <= 0:
-        return (
-            round(preco, 2),
-            None,
-            None,
-            None,
-        )
-
-    return (
-        round(preco, 2),
-        round(stop, 2),
-        round(alvo, 2),
-        round(retorno / risco, 2),
+    alvo = (
+        resistencia
+        if resistencia > preco
+        else preco + (2 * risco)
     )
+
+    retorno = alvo - preco
+    risco_retorno = retorno / risco
+
+    if risco_retorno < 2:
+        alvo = preco + (2 * risco)
+        risco_retorno = 2.0
+
+        alertas.append(
+            "A resistência atual não oferece "
+            "relação risco-retorno de 2 para 1. "
+            "O alvo exibido é uma projeção."
+        )
+
+    return stop, alvo, risco_retorno
+
+
+def _plano_venda(
+    preco: float,
+    suporte: float,
+    resistencia: float,
+    atr: float,
+    alertas: list[str],
+):
+    stop_limite = (
+        preco + (2 * atr)
+    )
+
+    stop_estrutural = (
+        resistencia + (0.25 * atr)
+        if resistencia > preco
+        else stop_limite
+    )
+
+    stop = min(
+        stop_limite,
+        stop_estrutural,
+    )
+
+    risco = stop - preco
+
+    if risco <= 0:
+        return None, None, None
+
+    alvo = (
+        suporte
+        if 0 < suporte < preco
+        else preco - (2 * risco)
+    )
+
+    alvo = max(
+        alvo,
+        0.01,
+    )
+
+    retorno = preco - alvo
+    risco_retorno = retorno / risco
+
+    if risco_retorno < 2:
+        alvo = max(
+            preco - (2 * risco),
+            0.01,
+        )
+
+        risco_retorno = 2.0
+
+        alertas.append(
+            "O suporte atual não oferece "
+            "relação risco-retorno de 2 para 1. "
+            "O alvo exibido é uma projeção."
+        )
+
+    return stop, alvo, risco_retorno
 
 
 def calcular_sinal_tecnico(
     indicadores: dict,
 ) -> dict:
-    preco = _numero(
-        indicadores.get("preco")
+    preco = float(
+        indicadores["preco"]
     )
 
-    ema9 = _numero(
-        indicadores.get("ema9")
+    ema9 = float(
+        indicadores["ema9"]
     )
 
-    ema21 = _numero(
-        indicadores.get("ema21")
+    ema21 = float(
+        indicadores["ema21"]
     )
 
-    sma50 = _numero(
-        indicadores.get("sma50")
+    sma50 = float(
+        indicadores["sma50"]
     )
 
-    sma200 = _numero(
-        indicadores.get("sma200")
+    sma200 = float(
+        indicadores.get(
+            "sma200",
+            0,
+        )
     )
 
-    rsi = _numero(
-        indicadores.get("rsi14"),
-        50.0,
+    rsi = float(
+        indicadores["rsi14"]
     )
 
-    macd_histograma = _numero(
-        indicadores.get("macd_histograma")
+    macd_histograma = float(
+        indicadores[
+            "macd_histograma"
+        ]
     )
 
-    volume_ratio = _numero(
-        indicadores.get("volume_ratio"),
-        1.0,
+    volume_ratio = float(
+        indicadores.get(
+            "volume_ratio",
+            0,
+        )
     )
 
-    retorno20 = _numero(
-        indicadores.get("retorno20")
+    retorno20 = float(
+        indicadores.get(
+            "retorno20",
+            0,
+        )
     )
 
-    volatilidade = _numero(
-        indicadores.get("volatilidade20")
+    suporte = float(
+        indicadores["suporte20"]
+    )
+
+    resistencia = float(
+        indicadores[
+            "resistencia20"
+        ]
+    )
+
+    atr = float(
+        indicadores.get(
+            "atr14",
+            0,
+        )
     )
 
     pontos = 0
     motivos = []
     alertas = []
 
-    if ema9 > ema21:
+    if preco > ema9 > ema21:
+        pontos += 2
+
+        motivos.append(
+            "Preço acima das EMA 9 e 21, "
+            "com alinhamento de alta."
+        )
+
+    elif preco < ema9 < ema21:
+        pontos -= 2
+
+        motivos.append(
+            "Preço abaixo das EMA 9 e 21, "
+            "com alinhamento de baixa."
+        )
+
+    else:
+        motivos.append(
+            "Médias curtas sem alinhamento "
+            "direcional claro."
+        )
+
+    if preco > sma50:
         pontos += 1
+
         motivos.append(
-            "EMA 9 acima da EMA 21, indicando força no curto prazo."
+            "Preço acima da SMA 50."
         )
 
-    elif ema9 < ema21:
+    else:
         pontos -= 1
+
         motivos.append(
-            "EMA 9 abaixo da EMA 21, indicando fraqueza no curto prazo."
+            "Preço abaixo da SMA 50."
         )
 
-    if sma50 > 0:
-        if preco > sma50:
+    if sma200 > 0:
+        if preco > sma200:
             pontos += 1
+
             motivos.append(
-                "Preço acima da média móvel de 50 pregões."
+                "Preço acima da SMA 200."
             )
 
-        elif preco < sma50:
+        else:
             pontos -= 1
+
             motivos.append(
-                "Preço abaixo da média móvel de 50 pregões."
+                "Preço abaixo da SMA 200."
             )
-
-    if sma50 > 0 and sma200 > 0:
-        if sma50 > sma200:
-            pontos += 1
-            motivos.append(
-                "SMA 50 acima da SMA 200, confirmando tendência estrutural de alta."
-            )
-
-        elif sma50 < sma200:
-            pontos -= 1
-            motivos.append(
-                "SMA 50 abaixo da SMA 200, confirmando tendência estrutural de baixa."
-            )
-
-    if 52 <= rsi <= 70:
-        pontos += 1
-        motivos.append(
-            "RSI em zona favorável à continuidade compradora."
-        )
-
-    elif 30 <= rsi <= 48:
-        pontos -= 1
-        motivos.append(
-            "RSI em zona favorável à continuidade vendedora."
-        )
-
-    elif rsi > 70:
-        alertas.append(
-            "RSI acima de 70: ativo pode estar sobrecomprado."
-        )
-
-    elif rsi < 30:
-        alertas.append(
-            "RSI abaixo de 30: ativo pode estar sobrevendido."
-        )
 
     if macd_histograma > 0:
         pontos += 1
+
         motivos.append(
             "Histograma do MACD positivo."
         )
 
-    elif macd_histograma < 0:
+    else:
         pontos -= 1
+
         motivos.append(
             "Histograma do MACD negativo."
         )
 
-    if volume_ratio >= 1.20:
-        if retorno20 > 0:
-            pontos += 1
-            motivos.append(
-                "Volume acima da média confirma o movimento de alta."
-            )
+    if 55 <= rsi <= 70:
+        pontos += 1
 
-        elif retorno20 < 0:
-            pontos -= 1
-            motivos.append(
-                "Volume acima da média confirma o movimento de baixa."
-            )
+        motivos.append(
+            "RSI confirma momento comprador "
+            "sem sobrecompra extrema."
+        )
 
-    elif volume_ratio < 0.70:
+    elif 30 <= rsi <= 45:
+        pontos -= 1
+
+        motivos.append(
+            "RSI confirma fraqueza compradora."
+        )
+
+    elif rsi > 70:
         alertas.append(
-            "Volume abaixo da média reduz a confiabilidade do movimento."
+            "RSI em região de sobrecompra."
+        )
+
+    elif rsi < 30:
+        alertas.append(
+            "RSI em região de sobrevenda."
         )
 
     if retorno20 >= 0.03:
         pontos += 1
+
         motivos.append(
-            "Retorno positivo nos últimos 20 pregões."
+            "Retorno de 20 pregões positivo."
         )
 
     elif retorno20 <= -0.03:
         pontos -= 1
+
         motivos.append(
-            "Retorno negativo nos últimos 20 pregões."
+            "Retorno de 20 pregões negativo."
         )
 
-    if volatilidade >= 0.60:
+    if volume_ratio >= 1.20:
+        if pontos > 0:
+            pontos += 1
+
+            motivos.append(
+                "Volume acima da média confirma "
+                "o movimento comprador."
+            )
+
+        elif pontos < 0:
+            pontos -= 1
+
+            motivos.append(
+                "Volume acima da média confirma "
+                "o movimento vendedor."
+            )
+
+    elif 0 < volume_ratio < 0.70:
         alertas.append(
-            "Volatilidade anualizada elevada; risco operacional ampliado."
+            "Movimento com volume abaixo "
+            "da média de 20 pregões."
         )
 
     if pontos >= 4:
@@ -283,29 +339,92 @@ def calcular_sinal_tecnico(
     else:
         confianca = "BAIXA"
 
-    (
-        preco_referencia,
-        stop,
-        alvo,
-        risco_retorno,
-    ) = _plano_operacional(
-        sinal,
-        indicadores,
+    preco_referencia = None
+    stop = None
+    alvo = None
+    risco_retorno = None
+
+    if sinal != "NEUTRO":
+        preco_referencia = preco
+
+        if atr <= 0:
+            alertas.append(
+                "ATR indisponível. Não foi "
+                "possível calcular stop e alvo."
+            )
+
+        elif sinal == "COMPRA":
+            (
+                stop,
+                alvo,
+                risco_retorno,
+            ) = _plano_compra(
+                preco,
+                suporte,
+                resistencia,
+                atr,
+                alertas,
+            )
+
+        else:
+            (
+                stop,
+                alvo,
+                risco_retorno,
+            ) = _plano_venda(
+                preco,
+                suporte,
+                resistencia,
+                atr,
+                alertas,
+            )
+
+    distancia_suporte = float(
+        indicadores.get(
+            "distancia_suporte",
+            0,
+        )
     )
 
-    if sinal == "NEUTRO":
-        motivos.append(
-            "A pontuação não atingiu o mínimo necessário para um sinal direcional."
+    distancia_resistencia = float(
+        indicadores.get(
+            "distancia_resistencia",
+            0,
+        )
+    )
+
+    if (
+        sinal == "COMPRA"
+        and 0
+        < distancia_resistencia
+        < 0.02
+    ):
+        alertas.append(
+            "Preço a menos de 2% da resistência."
+        )
+
+    if (
+        sinal == "VENDA"
+        and 0
+        < distancia_suporte
+        < 0.02
+    ):
+        alertas.append(
+            "Preço a menos de 2% do suporte."
         )
 
     return {
         "sinal": sinal,
         "pontos": pontos,
         "confianca": confianca,
-        "preco_referencia": preco_referencia,
-        "stop": stop,
-        "alvo": alvo,
-        "risco_retorno": risco_retorno,
+        "preco_referencia": _arredondar(
+            preco_referencia
+        ),
+        "stop": _arredondar(stop),
+        "alvo": _arredondar(alvo),
+        "risco_retorno": _arredondar(
+            risco_retorno
+        ),
         "motivos": motivos,
         "alertas": alertas,
     }

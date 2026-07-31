@@ -4,6 +4,14 @@ import numpy as np
 import pandas as pd
 
 
+COLUNAS_OBRIGATORIAS = {
+    "High",
+    "Low",
+    "Close",
+    "Volume",
+}
+
+
 def _numero(valor, padrao=0.0):
     if valor is None or pd.isna(valor):
         return float(padrao)
@@ -11,62 +19,58 @@ def _numero(valor, padrao=0.0):
     return float(valor)
 
 
-def _retorno_periodo(
-    fechamento: pd.Series,
-    periodo: int,
-) -> float:
-    if len(fechamento) <= periodo:
-        return 0.0
-
-    anterior = _numero(
-        fechamento.iloc[-periodo - 1]
-    )
-
-    atual = _numero(
-        fechamento.iloc[-1]
-    )
-
-    if anterior == 0:
-        return 0.0
-
-    return (atual / anterior) - 1
-
-
 def calcular_indicadores(
     df: pd.DataFrame,
 ) -> dict:
+    colunas_ausentes = (
+        COLUNAS_OBRIGATORIAS
+        - set(df.columns)
+    )
+
+    if colunas_ausentes:
+        nomes = ", ".join(
+            sorted(colunas_ausentes)
+        )
+
+        raise ValueError(
+            f"Colunas ausentes: {nomes}"
+        )
+
     dados = df.copy()
 
     fechamento = pd.to_numeric(
         dados["Close"],
         errors="coerce",
-    ).dropna()
-
-    if len(fechamento) < 35:
-        raise ValueError(
-            "Histórico insuficiente para os indicadores."
-        )
-
-    maximo = pd.to_numeric(
-        dados["High"],
-        errors="coerce",
-    ).reindex(
-        fechamento.index
     )
 
-    minimo = pd.to_numeric(
+    maxima = pd.to_numeric(
+        dados["High"],
+        errors="coerce",
+    )
+
+    minima = pd.to_numeric(
         dados["Low"],
         errors="coerce",
-    ).reindex(
-        fechamento.index
     )
 
     volume = pd.to_numeric(
         dados["Volume"],
         errors="coerce",
-    ).reindex(
-        fechamento.index
-    ).fillna(0.0)
+    )
+
+    validos = fechamento.notna()
+
+    fechamento = fechamento[validos]
+    maxima = maxima[validos]
+    minima = minima[validos]
+    volume = volume[validos].fillna(0.0)
+
+    if len(fechamento) < 60:
+        raise ValueError(
+            "Histórico insuficiente. "
+            "São necessários pelo menos "
+            "60 pregões."
+        )
 
     ema9 = fechamento.ewm(
         span=9,
@@ -79,13 +83,11 @@ def calcular_indicadores(
     ).mean()
 
     sma50 = fechamento.rolling(
-        50,
-        min_periods=1,
+        50
     ).mean()
 
     sma200 = fechamento.rolling(
-        200,
-        min_periods=1,
+        200
     ).mean()
 
     ema12 = fechamento.ewm(
@@ -105,7 +107,9 @@ def calcular_indicadores(
         adjust=False,
     ).mean()
 
-    macd_histograma = macd - macd_sinal
+    macd_histograma = (
+        macd - macd_sinal
+    )
 
     delta = fechamento.diff()
 
@@ -129,9 +133,12 @@ def calcular_indicadores(
         adjust=False,
     ).mean()
 
-    rs = ganho_medio / perda_media.replace(
-        0,
-        np.nan,
+    rs = (
+        ganho_medio
+        / perda_media.replace(
+            0,
+            np.nan,
+        )
     )
 
     rsi = 100 - (
@@ -139,37 +146,47 @@ def calcular_indicadores(
     )
 
     rsi = rsi.mask(
-        (ganho_medio == 0)
-        & (perda_media == 0),
+        (
+            (ganho_medio == 0)
+            & (perda_media == 0)
+        ),
         50,
     )
 
     rsi = rsi.mask(
-        (perda_media == 0)
-        & (ganho_medio > 0),
+        (
+            (perda_media == 0)
+            & (ganho_medio > 0)
+        ),
         100,
     )
 
     rsi = rsi.mask(
-        (ganho_medio == 0)
-        & (perda_media > 0),
+        (
+            (ganho_medio == 0)
+            & (perda_media > 0)
+        ),
         0,
     )
 
-    fechamento_anterior = fechamento.shift(
-        1
+    fechamento_anterior = (
+        fechamento.shift(1)
     )
 
     true_range = pd.concat(
         [
-            (maximo - minimo).abs(),
-            (maximo - fechamento_anterior).abs(),
-            (minimo - fechamento_anterior).abs(),
+            maxima - minima,
+            (
+                maxima
+                - fechamento_anterior
+            ).abs(),
+            (
+                minima
+                - fechamento_anterior
+            ).abs(),
         ],
         axis=1,
-    ).max(
-        axis=1
-    )
+    ).max(axis=1)
 
     atr14 = true_range.ewm(
         alpha=1 / 14,
@@ -179,7 +196,7 @@ def calcular_indicadores(
 
     retornos = fechamento.pct_change()
 
-    volatilidade = (
+    volatilidade20 = (
         retornos
         .rolling(
             20,
@@ -190,33 +207,23 @@ def calcular_indicadores(
     )
 
     suporte20 = (
-        minimo
-        .rolling(
-            20,
-            min_periods=1,
-        )
+        minima
+        .rolling(20)
         .min()
         .shift(1)
     )
 
     resistencia20 = (
-        maximo
-        .rolling(
-            20,
-            min_periods=1,
-        )
+        maxima
+        .rolling(20)
         .max()
         .shift(1)
     )
 
     volume_medio20 = (
         volume
-        .rolling(
-            20,
-            min_periods=1,
-        )
+        .rolling(20)
         .mean()
-        .shift(1)
     )
 
     preco = _numero(
@@ -250,37 +257,38 @@ def calcular_indicadores(
         macd_sinal.iloc[-1]
     )
 
-    suporte_atual = _numero(
-        suporte20.iloc[-1]
-    )
-
-    resistencia_atual = _numero(
-        resistencia20.iloc[-1]
+    media_volume = _numero(
+        volume_medio20.iloc[-1]
     )
 
     volume_atual = _numero(
         volume.iloc[-1]
     )
 
-    volume_medio_atual = _numero(
-        volume_medio20.iloc[-1]
-    )
-
     volume_ratio = (
-        volume_atual / volume_medio_atual
-        if volume_medio_atual > 0
+        volume_atual / media_volume
+        if media_volume > 0
         else 0.0
     )
 
+    suporte = _numero(
+        suporte20.iloc[-1]
+    )
+
+    resistencia = _numero(
+        resistencia20.iloc[-1]
+    )
+
     distancia_suporte = (
-        (preco - suporte_atual) / preco
-        if preco > 0 and suporte_atual > 0
+        (preco - suporte) / preco
+        if preco > 0 and suporte > 0
         else 0.0
     )
 
     distancia_resistencia = (
-        (resistencia_atual - preco) / preco
-        if preco > 0 and resistencia_atual > 0
+        (resistencia - preco) / preco
+        if preco > 0
+        and resistencia > 0
         else 0.0
     )
 
@@ -308,20 +316,22 @@ def calcular_indicadores(
             atr14.iloc[-1]
         ),
         "volatilidade20": _numero(
-            volatilidade.iloc[-1]
+            volatilidade20.iloc[-1]
         ),
-        "suporte20": suporte_atual,
-        "resistencia20": resistencia_atual,
+        "suporte20": suporte,
+        "resistencia20": resistencia,
         "volume": volume_atual,
-        "volume_medio20": volume_medio_atual,
+        "volume_medio20": media_volume,
         "volume_ratio": volume_ratio,
-        "retorno20": _retorno_periodo(
-            fechamento,
-            20,
+        "retorno20": _numero(
+            fechamento
+            .pct_change(20)
+            .iloc[-1]
         ),
-        "retorno60": _retorno_periodo(
-            fechamento,
-            60,
+        "retorno60": _numero(
+            fechamento
+            .pct_change(60)
+            .iloc[-1]
         ),
         "distancia_suporte": distancia_suporte,
         "distancia_resistencia": distancia_resistencia,
@@ -332,7 +342,8 @@ def calcular_indicadores(
         ),
         "macd_status": (
             "positivo"
-            if macd_atual > macd_sinal_atual
+            if macd_atual
+            > macd_sinal_atual
             else "negativo"
         ),
     }

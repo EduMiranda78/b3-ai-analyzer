@@ -1,25 +1,45 @@
-
-!.env.example
-# Ambientes virtuais
-# Arquivos locais
-# Backups locais
-# Banco local
-# Python
-# Variáveis e credenciais
-*.db
-*.db-shm
-*.db-wal
-*.log
-*.py[cod]
-.DS_Store
+# Variáveis de ambiente e segredos
 .env
 .env.*
-.mypy_cache/
-.pytest_cache/
-.ruff_cache/
+!.env.example
+
+# Ambientes virtuais
 .venv/
-__pycache__/
-backup_*/
-env/
-instance/
 venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDEs e editores
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Logs e arquivos temporários
+*.log
+*.tmp
+*.temp
+
+# Builds e distribuição
+build/
+dist/
+*.egg-info/
+*.pyc
+instance/
+backup_*/
+*.db
+wsgi_prod.py

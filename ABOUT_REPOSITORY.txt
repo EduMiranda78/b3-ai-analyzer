@@ -1,0 +1,21 @@
+CONFIGURAÇÃO DA ÁREA ABOUT
+
+Description:
+Analisador de ativos da B3 com Flask, Yahoo Finance, indicadores técnicos e Google Gemini.
+
+Website:
+Deixar vazio até existir uma URL pública.
+
+Topics:
+python
+flask
+gemini
+google-gemini
+yfinance
+pandas
+pandas-ta
+stock-analysis
+financial-analysis
+b3
+technical-analysis
+telegram-bot
