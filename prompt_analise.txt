@@ -1,41 +1,33 @@
-Analise tecnicamente o ativo usando somente os dados fornecidos.
+Explique a análise técnica usando somente os dados fornecidos.
 
-Não invente notícias, fundamentos, indicadores, preços ou eventos.
-Não repita todos os dados recebidos.
-Não escreva introdução.
-Se os sinais forem conflitantes, use NEUTRO.
-Seja direto e limite a resposta a 350 palavras.
+O sinal final foi calculado pelo sistema. Não altere, não recalcule e não contradiga esse sinal.
 
-Formato obrigatório:
+Regras:
 
-## Resumo técnico
+- Não invente notícias, fundamentos ou preços.
+- Não repita toda a tabela de dados.
+- Não use introdução.
+- Use no máximo 220 palavras.
+- VENDA representa viés técnico desfavorável ou possível saída. Não significa venda a descoberto.
 
-- Tendência:
-- Momento:
-- Volume:
-- Volatilidade:
+Formato:
 
-## Níveis relevantes
+## Leitura técnica
 
-- Suporte:
-- Resistência:
+Explique tendência, momento, volume e volatilidade em até dois parágrafos curtos.
 
-## Interpretação
+## Níveis e risco
 
-Explique em até cinco linhas a relação entre preço, médias, RSI, MACD e volume.
+Comente suporte, resistência, preço de referência, stop, alvo e relação risco-retorno.
 
-## Condições operacionais
+## Pontos de atenção
 
-- Cenário favorável:
-- Invalidação:
-- Risco principal:
+Liste no máximo três riscos ou conflitos.
 
-## SINALIZAÇÃO FINAL: COMPRA, VENDA ou NEUTRO
+## SINALIZAÇÃO FINAL: repita exatamente o sinal fornecido
 
-Justificativa: uma única frase.
+Justificativa: uma frase direta.
 
 Dados:
 
 {dados_do_ativo}
-
-A sinalização é apenas uma leitura técnica dos dados, não uma garantia de resultado.
