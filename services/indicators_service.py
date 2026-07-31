@@ -14,7 +14,7 @@ COLUNAS_OBRIGATORIAS = {
 
 def _numero(valor, padrao=0.0):
     if valor is None or pd.isna(valor):
-        return padrao
+        return float(padrao)
 
     return float(valor)
 
@@ -71,6 +71,27 @@ def calcular_indicadores(
             "São necessários pelo menos "
             "60 pregões."
         )
+
+    maximo = pd.to_numeric(
+        dados["High"],
+        errors="coerce",
+    ).reindex(
+        fechamento.index
+    )
+
+    minimo = pd.to_numeric(
+        dados["Low"],
+        errors="coerce",
+    ).reindex(
+        fechamento.index
+    )
+
+    volume = pd.to_numeric(
+        dados["Volume"],
+        errors="coerce",
+    ).reindex(
+        fechamento.index
+    ).fillna(0.0)
 
     ema9 = fechamento.ewm(
         span=9,
@@ -198,7 +219,10 @@ def calcular_indicadores(
 
     volatilidade20 = (
         retornos
-        .rolling(20)
+        .rolling(
+            20,
+            min_periods=2,
+        )
         .std()
         * math.sqrt(252)
     )
@@ -289,6 +313,40 @@ def calcular_indicadores(
         macd_sinal.iloc[-1]
     )
 
+    suporte_atual = _numero(
+        suporte20.iloc[-1]
+    )
+
+    resistencia_atual = _numero(
+        resistencia20.iloc[-1]
+    )
+
+    volume_atual = _numero(
+        volume.iloc[-1]
+    )
+
+    volume_medio_atual = _numero(
+        volume_medio20.iloc[-1]
+    )
+
+    volume_ratio = (
+        volume_atual / volume_medio_atual
+        if volume_medio_atual > 0
+        else 0.0
+    )
+
+    distancia_suporte = (
+        (preco - suporte_atual) / preco
+        if preco > 0 and suporte_atual > 0
+        else 0.0
+    )
+
+    distancia_resistencia = (
+        (resistencia_atual - preco) / preco
+        if preco > 0 and resistencia_atual > 0
+        else 0.0
+    )
+
     return {
         "preco": preco,
         "variacao_dia": variacao_dia,
@@ -338,6 +396,8 @@ def calcular_indicadores(
         "distancia_resistencia": (
             distancia_resistencia
         ),
+        "distancia_suporte": distancia_suporte,
+        "distancia_resistencia": distancia_resistencia,
         "tendencia_curta": (
             "alta"
             if ema9_atual > ema21_atual
