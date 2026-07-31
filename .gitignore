@@ -38,3 +38,8 @@ Thumbs.db
 build/
 dist/
 *.egg-info/
+*.pyc
+instance/
+backup_*/
+*.db
+wsgi_prod.py

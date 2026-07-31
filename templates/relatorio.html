@@ -3,181 +3,259 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Relatório de Análise</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #f0f2f5;
-            color: #1c1e21;
-            line-height: 1.6;
-        }
 
-        .container {
-            max-width: 800px;
-            margin: 30px auto;
-            background: #fff;
-            padding: 40px;
-            /* Aumentei o padding para mais respiro */
-            border-radius: 12px;
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
-        }
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-        /* --- ESTILO DOS TÍTULOS --- */
-        .container h2 {
-            font-size: 22px;
-            font-weight: 700;
-            /* Negrito */
-            color: #0056b3;
-            /* Azul escuro */
-            margin-top: 30px;
-            margin-bottom: 15px;
-            padding-bottom: 5px;
-            border-bottom: 2px solid #eeeeee;
-            /* Linha sutil abaixo do título */
-        }
+    <title>
+        Relatório de Mercado
+    </title>
 
-        /* Remove a margem extra do primeiro título */
-        .container h2:first-of-type {
-            margin-top: 0;
-        }
-
-        /* --- ESTILO DO CONTEÚDO (PARÁGRAFOS) --- */
-        .container p {
-            font-size: 16px;
-            font-weight: 400;
-            /* Peso normal (NÃO negrito) */
-            color: #333;
-            margin-bottom: 1em;
-        }
-
-        /* --- ESTILO DA LINHA SEPARADORA --- */
-        .container hr {
-            border: 0;
-            height: 1px;
-            background-color: #dddddd;
-            margin: 25px 0;
-        }
-
-        .actions {
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid #dddfe2;
-            text-align: center;
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-        }
-
-        .btn {
-            padding: 12px 25px;
-            border: none;
-            border-radius: 6px;
-            color: #fff;
-            font-weight: bold;
-            cursor: pointer;
-            text-decoration: none;
-            font-size: 16px;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .btn-print {
-            background-color: #6c757d;
-        }
-
-        .btn-print:hover {
-            background-color: #5a6268;
-        }
-
-        .btn-email {
-            background-color: #007bff;
-        }
-
-        .btn-email:hover {
-            background-color: #0056b3;
-        }
-
-        .btn-whatsapp {
-            background-color: #25D366;
-        }
-
-        .btn-whatsapp:hover {
-            background-color: #1EBE57;
-        }
-
-        .error {
-            color: #dc3545;
-            font-weight: bold;
-            text-align: center;
-        }
-
-        @media print {
-            body {
-                background-color: #fff;
-            }
-
-            .actions,
-            .back-link {
-                display: none;
-            }
-
-            .container {
-                box-shadow: none;
-                border: 1px solid #ccc;
-                margin: 0;
-                max-width: 100%;
-            }
-        }
-
-        .back-link {
-            display: block;
-            text-align: center;
-            margin-top: 20px;
-            color: #007bff;
-            text-decoration: none;
-            font-weight: bold;
-        }
-    </style>
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/style.css') }}"
+    >
 </head>
 
-<body>
-    <div class="container" id="report-content">
+<body class="report-page">
+
+    <div class="report-container">
+
         {% if error %}
-        <h1 class="error">Erro ao Gerar Relatório</h1>
-        <p class="error">{{ error }}</p>
+
+        <div class="error-card">
+
+            <h1>Falha na análise</h1>
+
+            <div class="error-message">
+                {{ error }}
+            </div>
+
+            <a
+                href="/"
+                class="btn-secondary"
+            >
+                Nova consulta
+            </a>
+
+        </div>
+
         {% else %}
-        <!-- O conteúdo gerado pelo Gemini será inserido aqui -->
-        {{ relatorio|safe }}
+
+        <div class="report-card">
+
+            <div class="report-header">
+
+                <div>
+                    <p class="report-kicker">
+                        Análise técnica
+                    </p>
+
+                    <h1>
+                        {{ ticker }}
+                    </h1>
+
+                    <p>
+                        Processado em
+                        {{ "%.2f"|format(tempo_total) }}
+                        segundos
+                    </p>
+                </div>
+
+                <div
+                    class="signal-badge signal-{{ analise.sinal|lower }}"
+                >
+                    {{ analise.sinal }}
+                </div>
+
+            </div>
+
+            <section class="signal-summary">
+
+                <div class="metric-card">
+                    <span>Pontuação</span>
+                    <strong>
+                        {{ analise.pontos }}
+                    </strong>
+                </div>
+
+                <div class="metric-card">
+                    <span>Confiança</span>
+                    <strong>
+                        {{ analise.confianca }}
+                    </strong>
+                </div>
+
+                <div class="metric-card">
+                    <span>Preço</span>
+                    <strong>
+                        R$
+                        {{ "%.2f"|format(indicadores.preco) }}
+                    </strong>
+                </div>
+
+                <div class="metric-card">
+                    <span>RSI 14</span>
+                    <strong>
+                        {{ "%.2f"|format(indicadores.rsi14) }}
+                    </strong>
+                </div>
+
+            </section>
+
+            {% if analise.preco_referencia is not none %}
+
+            <section class="trade-plan">
+
+                <h2>
+                    Plano técnico
+                </h2>
+
+                <div class="trade-plan-grid">
+
+                    <div>
+                        <span>Referência</span>
+                        <strong>
+                            R$
+                            {{ "%.2f"|format(analise.preco_referencia) }}
+                        </strong>
+                    </div>
+
+                    <div>
+                        <span>Stop</span>
+                        <strong>
+                            R$
+                            {{ "%.2f"|format(analise.stop) }}
+                        </strong>
+                    </div>
+
+                    <div>
+                        <span>Alvo</span>
+                        <strong>
+                            R$
+                            {{ "%.2f"|format(analise.alvo) }}
+                        </strong>
+                    </div>
+
+                    <div>
+                        <span>Risco-retorno</span>
+                        <strong>
+                            1 :
+                            {{ "%.2f"|format(analise.risco_retorno) }}
+                        </strong>
+                    </div>
+
+                </div>
+
+            </section>
+
+            {% endif %}
+
+            <section class="signal-reasons">
+
+                <div>
+                    <h2>
+                        Motivos do sinal
+                    </h2>
+
+                    <ul>
+                        {% for motivo in analise.motivos %}
+                        <li>
+                            {{ motivo }}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                {% if analise.alertas %}
+
+                <div class="alert-panel">
+
+                    <h2>
+                        Pontos de atenção
+                    </h2>
+
+                    <ul>
+                        {% for alerta in analise.alertas %}
+                        <li>
+                            {{ alerta }}
+                        </li>
+                        {% endfor %}
+                    </ul>
+
+                </div>
+
+                {% endif %}
+
+            </section>
+
+
+            {% if origem_relatorio == "motor local" %}
+
+            <div class="fallback-notice">
+
+                A explicação pela IA ficou
+                temporariamente indisponível.
+                Este relatório foi montado pelo
+                motor técnico local.
+
+            </div>
+
+            {% endif %}
+
+            <section class="report-content">
+
+                {{ relatorio|safe }}
+
+            </section>
+
+            <div class="report-disclaimer">
+
+                Esta é uma leitura técnica baseada em
+                dados históricos. Não representa garantia
+                de resultado nem recomendação individual
+                de investimento.
+
+            </div>
+
+            <div class="report-footer">
+
+                <a
+                    href="/"
+                    class="btn-secondary"
+                >
+                    Nova consulta
+                </a>
+
+                {% if analise_id %}
+
+                <a
+                    href="/historico/{{ analise_id }}"
+                    class="btn-secondary"
+                >
+                    Abrir análise salva
+                </a>
+
+                {% endif %}
+
+
+                <button
+                    onclick="window.print()"
+                    class="btn-primary"
+                >
+                    Imprimir relatório
+                </button>
+
+            </div>
+
+        </div>
+
         {% endif %}
 
-        <div class="actions">
-            <button class="btn btn-print" onclick="window.print()">🖨️ Imprimir</button>
-            <a href="#" id="email-btn" class="btn btn-email">📧 Enviar por E-mail</a>
-            <a href="#" id="whatsapp-btn" class="btn btn-whatsapp">💬 Compartilhar no WhatsApp</a>
-        </div>
     </div>
-    <a href="/" class="back-link">← Nova Consulta</a>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            // Prepara o corpo do email e do WhatsApp
-            const reportText = document.getElementById('report-content').innerText;
-            const reportTitle = "Análise do Ativo"; // Você pode tornar isso dinâmico se quiser
-
-            // Botão de E-mail
-            const emailBtn = document.getElementById('email-btn');
-            const emailBody = encodeURIComponent(reportText);
-            emailBtn.href = `mailto:?subject=${encodeURIComponent(reportTitle)}&body=${emailBody}`;
-
-            // Botão de WhatsApp
-            const whatsappBtn = document.getElementById('whatsapp-btn');
-            const whatsappBody = encodeURIComponent(reportText);
-            whatsappBtn.href = `https://api.whatsapp.com/send?text=${whatsappBody}`;
-            whatsappBtn.target = '_blank'; // Abrir em nova aba
-        });
-    </script>
 </body>
 
 </html>

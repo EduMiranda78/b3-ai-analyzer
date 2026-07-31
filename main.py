@@ -1,206 +1,492 @@
-import os
-import requests
-import google.generativeai as genai
-import yfinance as yf
-import pandas as pd
-import pandas_ta as ta
-from flask import Flask, render_template, request
-from flask import jsonify
-from datetime import datetime, timedelta
-import markdown2
-import re
-import threading
-from dotenv import load_dotenv, find_dotenv
 import logging
-#from telegram import Bot
-#from telegram.error import TelegramError
-load_dotenv(find_dotenv())
+import re
+import time
+from datetime import datetime
+from pathlib import Path
 
-# Configuração Telegram (já usa dotenv)
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-#bot = Bot(token=TELEGRAM_BOT_TOKEN) if TELEGRAM_BOT_TOKEN else None
+import markdown2
+from dotenv import load_dotenv
+from flask import Flask, abort, render_template, request
 
-# Inicializa o bot globalmente
+
+BASE_DIR = Path(__file__).resolve().parent
+
+load_dotenv(
+    dotenv_path=BASE_DIR / ".env",
+)
+
+from services.gemini_service import (
+    gerar_relatorio as gerar_relatorio_ia,
+)
+from services.history_service import (
+    inicializar_banco,
+    listar_analises,
+    obter_analise,
+    obter_anterior,
+    obter_estatisticas,
+    salvar_analise,
+)
+from services.indicators_service import (
+    calcular_indicadores,
+)
+from services.market_service import (
+    buscar_dados_ativo,
+)
+from services.report_service import (
+    gerar_relatorio_local,
+)
+from services.signal_service import (
+    calcular_sinal_tecnico,
+)
+from services.telegram_service import (
+    enviar_para_telegram,
+)
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format=(
+        "%(asctime)s | %(levelname)s | "
+        "%(message)s"
+    ),
+)
+
+logging.getLogger(
+    "httpx"
+).setLevel(
+    logging.WARNING
+)
+
+logging.getLogger(
+    "google_genai"
+).setLevel(
+    logging.WARNING
+)
+
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-app.debug = True
+app.config.update(
+    TEMPLATES_AUTO_RELOAD=False,
+)
 
-try:
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        raise ValueError("A variável de ambiente GOOGLE_API_KEY não foi definida.")
-    genai.configure(api_key=api_key)
-except Exception as e:
-    print(f"Erro ao configurar a API do Gemini: {e}")
+inicializar_banco()
 
-cache = {}
-CACHE_DURATION = timedelta(minutes=15)
-cache_lock = threading.Lock()
 
-def is_cache_valid(ticker):
-    with cache_lock:
-        if ticker not in cache:
-            return False
-        if datetime.now() - cache[ticker]['timestamp'] > CACHE_DURATION:
-            return False
-        return True
+def formatar_dados_para_ia(
+    ticker: str,
+    indicadores: dict,
+    analise: dict,
+) -> str:
+    ticker_exibicao = ticker.removesuffix(
+        ".SA"
+    )
 
-def buscar_dados_ativo(ticker):
-    if is_cache_valid(ticker):
-        return cache[ticker]['data'], None
-    try:
-        ativo = yf.Ticker(ticker)
-        hist = ativo.history(period="3mo")
-        if hist.empty:
-            return None, "Ticker inválido ou sem dados"
-        info = ativo.info
-        recomendacoes = getattr(ativo, 'recommendations', pd.DataFrame())
-        noticias = getattr(ativo, 'news', [])[:3]
+    motivos = "\n".join(
+        f"- {motivo}"
+        for motivo in analise["motivos"]
+    )
 
-        dados = {
-            "historico": hist,
-            "info": info,
-            "recomendacoes": recomendacoes,
-            "noticias": noticias
+    alertas = (
+        "\n".join(
+            f"- {alerta}"
+            for alerta in analise["alertas"]
+        )
+        or "- Nenhum alerta adicional."
+    )
+
+    preco_referencia = (
+        f"R$ {analise['preco_referencia']:.2f}"
+        if analise["preco_referencia"]
+        is not None
+        else "Não aplicável"
+    )
+
+    stop = (
+        f"R$ {analise['stop']:.2f}"
+        if analise["stop"] is not None
+        else "Não aplicável"
+    )
+
+    alvo = (
+        f"R$ {analise['alvo']:.2f}"
+        if analise["alvo"] is not None
+        else "Não aplicável"
+    )
+
+    risco_retorno = (
+        f"{analise['risco_retorno']:.2f}"
+        if analise["risco_retorno"]
+        is not None
+        else "Não aplicável"
+    )
+
+    return f"""Ticker: {ticker_exibicao}
+Data: {datetime.now():%d/%m/%Y %H:%M}
+
+SINAL FIXO DO SISTEMA: {analise['sinal']}
+Pontuação: {analise['pontos']}
+Confiança: {analise['confianca']}
+
+Preço: R$ {indicadores['preco']:.2f}
+Variação diária: {indicadores['variacao_dia']:.2%}
+Retorno em 20 pregões: {indicadores['retorno20']:.2%}
+Retorno em 60 pregões: {indicadores['retorno60']:.2%}
+
+EMA 9: {indicadores['ema9']:.2f}
+EMA 21: {indicadores['ema21']:.2f}
+SMA 50: {indicadores['sma50']:.2f}
+SMA 200: {indicadores['sma200']:.2f}
+
+RSI 14: {indicadores['rsi14']:.2f}
+MACD: {indicadores['macd']:.4f}
+Sinal do MACD: {indicadores['macd_sinal']:.4f}
+Histograma do MACD: {indicadores['macd_histograma']:.4f}
+
+ATR 14: {indicadores['atr14']:.2f}
+Volatilidade anualizada: {indicadores['volatilidade20']:.2%}
+
+Volume atual: {indicadores['volume']:.0f}
+Volume médio de 20 pregões: {indicadores['volume_medio20']:.0f}
+Razão de volume: {indicadores['volume_ratio']:.2f}
+
+Suporte de 20 pregões: R$ {indicadores['suporte20']:.2f}
+Resistência de 20 pregões: R$ {indicadores['resistencia20']:.2f}
+
+Preço de referência: {preco_referencia}
+Stop técnico: {stop}
+Alvo técnico: {alvo}
+Relação risco-retorno: {risco_retorno}
+
+Motivos:
+{motivos}
+
+Alertas:
+{alertas}
+"""
+
+
+@app.get("/")
+def index():
+    return render_template(
+        "index.html"
+    )
+
+
+@app.get("/health")
+def health():
+    return {
+        "status": "ok",
+        "motor_sinal": "ativo",
+    }, 200
+
+
+@app.get("/historico")
+def historico():
+    ticker = (
+        request.args
+        .get("ticker", "")
+        .strip()
+        .upper()
+        .removesuffix(".SA")
+    )
+
+    if ticker and not re.fullmatch(
+        r"[A-Z0-9]{4,6}",
+        ticker,
+    ):
+        ticker = ""
+
+    analises = listar_analises(
+        ticker=ticker or None,
+        limite=200,
+    )
+
+    estatisticas = obter_estatisticas(
+        ticker=ticker or None,
+    )
+
+    return render_template(
+        "historico.html",
+        analises=analises,
+        estatisticas=estatisticas,
+        ticker_filtro=ticker,
+    )
+
+
+@app.get("/historico/<int:analise_id>")
+def historico_detalhe(
+    analise_id: int,
+):
+    item = obter_analise(
+        analise_id
+    )
+
+    if item is None:
+        abort(404)
+
+    anterior = obter_anterior(
+        item["ticker"],
+        item["id"],
+    )
+
+    comparacao = None
+
+    if anterior is not None:
+        preco_anterior = float(
+            anterior["price"]
+        )
+
+        preco_atual = float(
+            item["price"]
+        )
+
+        variacao_preco = (
+            (
+                preco_atual
+                / preco_anterior
+            )
+            - 1
+        ) * 100 if preco_anterior else 0.0
+
+        comparacao = {
+            "sinal_anterior": anterior[
+                "signal"
+            ],
+            "mudou_sinal": (
+                anterior["signal"]
+                != item["signal"]
+            ),
+            "variacao_pontos": (
+                int(item["score"])
+                - int(anterior["score"])
+            ),
+            "variacao_preco_percentual": (
+                variacao_preco
+            ),
         }
 
-        with cache_lock:
-            cache[ticker] = {
-                'data': dados,
-                'timestamp': datetime.now()
-            }
-        return dados, None
-    except Exception as e:
-        return None, f"Erro na API Yahoo Finance: {e}"
+    relatorio_html = markdown2.markdown(
+        item["report_markdown"],
+        extras=["tables"],
+        safe_mode="escape",
+    )
 
-def calcular_indicadores(df_historico):
-    try:
-        df = df_historico.copy()
-        df.ta.sma(length=9, append=True)
-        df.ta.sma(length=21, append=True)
-        df.ta.ema(length=9, append=True)
-        df.ta.ema(length=21, append=True)
-        df.ta.macd(fast=12, slow=26, signal=9, append=True)
-        df.ta.rsi(length=14, append=True)
-        df['returns'] = df['Close'].pct_change()
-        df['volatilidade_20d'] = df['returns'].rolling(window=20).std() * (252**0.5)
-        return df.iloc[-1]
-    except:
-        return pd.Series({'Close': 0})
+    return render_template(
+        "historico_detalhe.html",
+        item=item,
+        anterior=anterior,
+        comparacao=comparacao,
+        relatorio_html=relatorio_html,
+    )
 
-def enviar_para_telegram(ticker, sinalizacao_final):
-    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-    chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
-    
-    if not token or not chat_id:
-        print("❌ .env sem TELEGRAM vars")
-        return
-    
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    mensagem = f"📈 *Nova Análise*\n\n`Ticker`: {ticker}\n`Sinalização Final`: {sinalizacao_final}"
-    
-    try:
-        response = requests.post(url, data={
-            'chat_id': chat_id,
-            'text': mensagem,
-            'parse_mode': 'Markdown'
-        }, timeout=10)
-        
-        print(f"✅ Telegram HTTP: {ticker} - {sinalizacao_final} (status: {response.status_code})")
-        print(f"📱 RESP: {response.json().get('ok', False)}")
-        
-    except Exception as e:
-        print(f"❌ Telegram erro: {e}")
 
-def formatar_dados_para_ia(ticker, dados_ativo, indicadores):
-    info = dados_ativo.get("info", {})
-    recom = dados_ativo.get("recomendacoes")
-    noticias = dados_ativo.get("noticias", [])
-
-    nome_empresa = info.get('longName', 'N/A')
-    preco_atual = info.get('currentPrice', indicadores.get('Close', 0))
-    variacao_dia = ((preco_atual / info.get('previousClose', 1)) - 1) if info.get('previousClose') else 0
-
-    recomendacao_geral = info.get('recommendationKey', 'N/A')
-    preco_alvo_medio = info.get('targetMeanPrice', 'N/A')
-
-    consenso = "N/A"
-    if recom is not None and not recom.empty and 'To Grade' in recom.columns:
-        consenso_df = recom['To Grade'].value_counts().reset_index()
-        consenso_df.columns = ['Recomendacao', 'Contagem']
-        consenso = ", ".join([f"{int(row['Contagem'])} {row['Recomendacao']}" for _, row in consenso_df.iterrows()])
-
-    titulos_noticias = "\n".join([f"- {item.get('title', 'N/A')}" for item in noticias[:3]])
-    if not titulos_noticias.strip():
-        titulos_noticias = "- Sem notícias recentes"
-
-    # CORREÇÃO: preço-alvo formatado corretamente
-    if isinstance(preco_alvo_medio, (int, float)):
-        preco_str = f"{preco_alvo_medio:.2f}"
-    else:
-        preco_str = 'N/A'
-
-    return f"""Ticker: {ticker}
-Empresa: {nome_empresa}
-Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}
-Preço Atual: R$ {preco_atual:.2f}
-Variação Dia: {variacao_dia:+.2%}
-SMA9: {indicadores.get('SMA_9', 0):.2f} | SMA21: {indicadores.get('SMA_21', 0):.2f}
-RSI14: {indicadores.get('RSI_14', 0):.1f} | MACD: {indicadores.get('MACD_12_26_9', 0):.4f}
-Recomendação: {recomendacao_geral.upper()}
-Preço-Alvo Médio: R$ {preco_str}
-Consenso: {consenso}
-Volatilidade 20d: {indicadores.get('volatilidade_20d', 0):.1%}
-Notícias: {titulos_noticias}"""
-
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/gerar_relatorio', methods=['POST'])
+@app.post("/gerar_relatorio")
 def gerar_relatorio():
-    ticker = request.form['ticker'].strip().upper()
-    if not ticker.endswith('.SA'):
-        ticker += '.SA'
+    inicio_total = time.perf_counter()
 
-    dados_ativo, erro = buscar_dados_ativo(ticker)
+    ticker = (
+        request.form
+        .get("ticker", "")
+        .strip()
+        .upper()
+    )
+
+    import re
+
+    ticker_pattern = re.compile(
+        r"^[A-Z0-9]{4,6}(\.SA)?$"
+    )
+
+    if not ticker_pattern.fullmatch(
+        ticker
+    ):
+        return render_template(
+            "relatorio.html",
+            error="Ticker inválido.",
+        ), 400
+
+    if not ticker.endswith(".SA"):
+        ticker += ".SA"
+
+    inicio_mercado = time.perf_counter()
+
+    dados, erro = buscar_dados_ativo(
+        ticker
+    )
+
+    logger.info(
+        "Yahoo Finance %s: %.2fs",
+        ticker,
+        (
+            time.perf_counter()
+            - inicio_mercado
+        ),
+    )
+
     if erro:
-        return render_template('relatorio.html', error=f"Erro: {erro}")
-
-    indicadores = calcular_indicadores(dados_ativo["historico"])
-    dados_formatados = formatar_dados_para_ia(ticker, dados_ativo, indicadores)
+        return render_template(
+            "relatorio.html",
+            error=erro,
+        ), 502
 
     try:
-        with open('prompt_analise.txt', 'r', encoding='utf-8') as f:
-            prompt_template = f.read()
+        indicadores = calcular_indicadores(
+            dados["historico"]
+        )
 
-        prompt_final = prompt_template.format(dados_do_ativo=dados_formatados)
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        response = model.generate_content(prompt_final)
+        analise = calcular_sinal_tecnico(
+            indicadores
+        )
 
-        report_text = response.text
-        report_text = re.sub(r'^(\d+\)\s+.*?$)', r'<h2>\1</h2>', report_text, flags=re.MULTILINE)
-        report_text = report_text.replace('---------------------------------', '<hr>')
-        relatorio_html = markdown2.markdown(report_text)
+        logger.info(
+            (
+                "Sinal %s: %s | "
+                "pontos=%s | confiança=%s"
+            ),
+            ticker,
+            analise["sinal"],
+            analise["pontos"],
+            analise["confianca"],
+        )
 
-        # 🔥 EXTRAI E ENVIA PARA TELEGRAM 
-        sinal_final_match = re.search(r'8\)\s*SINALIZAÇÃO\s*FINAL.*?([A-ZÇÂÕÚ]+)\.', report_text, re.IGNORECASE | re.DOTALL | re.MULTILINE)
-        sinalizacao_final = sinal_final_match.group(1).upper() if sinal_final_match else "SEM SINAL"
-        print(f"🔍 SINAL DETECTADO: '{sinalizacao_final}'")
-        
-        enviar_para_telegram(ticker, sinalizacao_final)  # ← ESTA LINHA FALTAVA!!!
+        dados_ia = formatar_dados_para_ia(
+            ticker,
+            indicadores,
+            analise,
+        )
 
-        return render_template('relatorio.html', relatorio=relatorio_html)
+        prompt_base = (
+            BASE_DIR
+            / "prompt_analise.txt"
+        ).read_text(
+            encoding="utf-8"
+        )
+
+        prompt = prompt_base.replace(
+            "{dados_do_ativo}",
+            dados_ia,
+        )
+
+        inicio_ia = time.perf_counter()
+
+        origem_relatorio = "Gemini"
+
+        try:
+            texto = gerar_relatorio_ia(
+                prompt
+            )
+
+            logger.info(
+                "Gemini %s: %.2fs",
+                ticker,
+               (
+                    time.perf_counter()
+                    - inicio_ia
+                ),
+            )
+
+        except Exception as erro_ia:
+            origem_relatorio = "motor local"
+
+            logger.warning(
+                (
+                    "Gemini indisponível para %s. "
+                    "Usando relatório local. "
+                    "Erro: %s: %s"
+                ),
+                ticker,
+                type(erro_ia).__name__,
+                erro_ia,
+            )
+
+            texto = gerar_relatorio_local(
+                ticker=ticker.removesuffix(
+                    ".SA"
+                ),
+                indicadores=indicadores,
+                analise=analise,
+            )
+
+        html = markdown2.markdown(
+            texto,
+            extras=["tables"],
+            safe_mode="escape",
+        )
+
+        enviar_para_telegram(
+            ticker.removesuffix(".SA"),
+            analise["sinal"],
+        )
+
+        tempo_total = (
+            time.perf_counter()
+            - inicio_total
+        )
+
+        logger.info(
+            "Análise total %s: %.2fs",
+            ticker,
+            tempo_total,
+        )
+
+        analise_id = None
+
+        try:
+            analise_id = salvar_analise(
+                ticker=ticker.removesuffix(
+                    ".SA"
+                ),
+                indicadores=indicadores,
+                analise=analise,
+                origem_relatorio=origem_relatorio,
+                tempo_total=tempo_total,
+                relatorio_markdown=texto,
+            )
+
+            logger.info(
+                "Análise %s salva com ID %s",
+                ticker,
+                analise_id,
+            )
+
+        except Exception:
+            logger.exception(
+                "Falha ao salvar histórico de %s",
+                ticker,
+            )
+
+        return render_template(
+            "relatorio.html",
+            relatorio=html,
+            ticker=ticker.removesuffix(
+                ".SA"
+            ),
+            analise=analise,
+            indicadores=indicadores,
+            tempo_total=tempo_total,
+            origem_relatorio=origem_relatorio,
+            analise_id=analise_id,
+        )
+
+    except Exception:
+        logger.exception(
+            "Falha ao gerar análise de %s",
+            ticker,
+        )
+
+        return render_template(
+            "relatorio.html",
+            error=(
+                "Não foi possível gerar "
+                "o relatório agora."
+            ),
+        ), 500
 
 
-    except FileNotFoundError:
-        return render_template('relatorio.html', error="Arquivo 'prompt_analise.txt' não encontrado.")
-    except Exception as e:
-        return render_template('relatorio.html', error=f"Erro ao se comunicar com a API do Gemini: {e}")
-
-
-if __name__ == '__main__':
-    from werkzeug.serving import run_simple
-    run_simple('0.0.0.0', 5000, app, use_reloader=True)
+if __name__ == "__main__":
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+    )
