@@ -19,6 +19,43 @@ def _numero(valor, padrao=0.0):
     return float(valor)
 
 
+def _classificar_tendencia(
+    ema9: float,
+    ema21: float,
+    tolerancia: float = 0.001,
+) -> str:
+    if ema21 <= 0:
+        return "indefinida"
+
+    distancia = (
+        ema9 / ema21
+    ) - 1
+
+    if distancia > tolerancia:
+        return "alta"
+
+    if distancia < -tolerancia:
+        return "baixa"
+
+    return "lateral"
+
+
+def _classificar_macd(
+    macd: float,
+    sinal: float,
+    tolerancia: float = 1e-9,
+) -> str:
+    diferenca = macd - sinal
+
+    if diferenca > tolerancia:
+        return "positivo"
+
+    if diferenca < -tolerancia:
+        return "negativo"
+
+    return "neutro"
+
+
 def calcular_indicadores(
     df: pd.DataFrame,
 ) -> dict:
@@ -58,7 +95,11 @@ def calcular_indicadores(
         errors="coerce",
     )
 
-    validos = fechamento.notna()
+    validos = (
+        fechamento.notna()
+        & maxima.notna()
+        & minima.notna()
+    )
 
     fechamento = fechamento[validos]
     maxima = maxima[validos]
@@ -206,6 +247,9 @@ def calcular_indicadores(
         * math.sqrt(252)
     )
 
+    # Níveis de referência usam apenas pregões anteriores.
+    # O shift(1) evita que a barra atual "crie" o próprio
+    # suporte/resistência e reduz viés de look-ahead.
     suporte20 = (
         minima
         .rolling(20)
@@ -220,10 +264,24 @@ def calcular_indicadores(
         .shift(1)
     )
 
+    # O volume atual é comparado com os 20 pregões anteriores,
+    # e não com uma média que já contém a própria barra.
     volume_medio20 = (
         volume
         .rolling(20)
         .mean()
+        .shift(1)
+    )
+
+    valor_financeiro = (
+        fechamento * volume
+    )
+
+    valor_financeiro_medio20 = (
+        valor_financeiro
+        .rolling(20)
+        .mean()
+        .shift(1)
     )
 
     preco = _numero(
@@ -249,12 +307,28 @@ def calcular_indicadores(
         ema21.iloc[-1]
     )
 
+    sma50_atual = _numero(
+        sma50.iloc[-1]
+    )
+
+    sma200_raw = sma200.iloc[-1]
+    sma200_disponivel = (
+        not pd.isna(sma200_raw)
+    )
+    sma200_atual = _numero(
+        sma200_raw
+    )
+
     macd_atual = _numero(
         macd.iloc[-1]
     )
 
     macd_sinal_atual = _numero(
         macd_sinal.iloc[-1]
+    )
+
+    atr_atual = _numero(
+        atr14.iloc[-1]
     )
 
     media_volume = _numero(
@@ -292,16 +366,63 @@ def calcular_indicadores(
         else 0.0
     )
 
+    range_atual = _numero(
+        (
+            maxima.iloc[-1]
+            - minima.iloc[-1]
+        )
+    )
+
+    range_atr = (
+        range_atual / atr_atual
+        if atr_atual > 0
+        else 0.0
+    )
+
+    # Close Location Value: -1 = fechamento na mínima,
+    # +1 = fechamento na máxima. Ajuda a medir a força
+    # da barra sem depender apenas de osciladores.
+    if range_atual > 0:
+        clv = (
+            (
+                2 * preco
+                - maxima.iloc[-1]
+                - minima.iloc[-1]
+            )
+            / range_atual
+        )
+    else:
+        clv = 0.0
+
+    clv = float(
+        max(
+            -1.0,
+            min(1.0, clv),
+        )
+    )
+
+    if (
+        resistencia > 0
+        and preco > resistencia
+    ):
+        rompimento20 = "alta"
+    elif (
+        suporte > 0
+        and preco < suporte
+    ):
+        rompimento20 = "baixa"
+    else:
+        rompimento20 = "nenhum"
+
     return {
         "preco": preco,
         "variacao_dia": variacao_dia,
         "ema9": ema9_atual,
         "ema21": ema21_atual,
-        "sma50": _numero(
-            sma50.iloc[-1]
-        ),
-        "sma200": _numero(
-            sma200.iloc[-1]
+        "sma50": sma50_atual,
+        "sma200": sma200_atual,
+        "sma200_disponivel": (
+            sma200_disponivel
         ),
         "rsi14": _numero(
             rsi.iloc[-1],
@@ -312,8 +433,11 @@ def calcular_indicadores(
         "macd_histograma": _numero(
             macd_histograma.iloc[-1]
         ),
-        "atr14": _numero(
-            atr14.iloc[-1]
+        "atr14": atr_atual,
+        "atr_percentual": (
+            atr_atual / preco
+            if preco > 0
+            else 0.0
         ),
         "volatilidade20": _numero(
             volatilidade20.iloc[-1]
@@ -323,6 +447,12 @@ def calcular_indicadores(
         "volume": volume_atual,
         "volume_medio20": media_volume,
         "volume_ratio": volume_ratio,
+        "valor_financeiro_medio20": (
+            _numero(
+                valor_financeiro_medio20
+                .iloc[-1]
+            )
+        ),
         "retorno20": _numero(
             fechamento
             .pct_change(20)
@@ -335,15 +465,22 @@ def calcular_indicadores(
         ),
         "distancia_suporte": distancia_suporte,
         "distancia_resistencia": distancia_resistencia,
+        "periodos": int(
+            len(fechamento)
+        ),
+        "clv": clv,
+        "range_atr": range_atr,
+        "rompimento20": rompimento20,
         "tendencia_curta": (
-            "alta"
-            if ema9_atual > ema21_atual
-            else "baixa"
+            _classificar_tendencia(
+                ema9_atual,
+                ema21_atual,
+            )
         ),
         "macd_status": (
-            "positivo"
-            if macd_atual
-            > macd_sinal_atual
-            else "negativo"
+            _classificar_macd(
+                macd_atual,
+                macd_sinal_atual,
+            )
         ),
     }

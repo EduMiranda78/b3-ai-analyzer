@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+    <title>Backtest do motor técnico</title>
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/style.css') }}"
+    >
+</head>
+
+<body class="report-page">
+    <main class="history-container">
+        <header class="history-header">
+            <div>
+                <p class="report-kicker">
+                    Validação quantitativa
+                </p>
+                <h1>Backtest do motor técnico</h1>
+                <p>
+                    Mede o viés direcional com dados históricos,
+                    sem usar informações futuras no cálculo do sinal.
+                </p>
+            </div>
+
+            <a
+                href="/"
+                class="btn-secondary"
+            >
+                Nova análise
+            </a>
+        </header>
+
+        <form
+            method="GET"
+            action="/backtest"
+            class="history-filter"
+        >
+            <input
+                type="text"
+                name="ticker"
+                value="{{ ticker }}"
+                placeholder="Ticker, exemplo PETR4"
+                maxlength="6"
+                required
+            >
+
+            <button
+                type="submit"
+                class="btn-primary"
+            >
+                Executar backtest
+            </button>
+        </form>
+
+        {% if erro %}
+        <div class="error-card">
+            <div class="error-message">
+                {{ erro }}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if resultado %}
+        <section class="history-stats">
+            <div class="metric-card">
+                <span>Sinais</span>
+                <strong>
+                    {{ resultado.total_sinais }}
+                </strong>
+            </div>
+
+            <div class="metric-card">
+                <span>Taxa de acerto</span>
+                <strong>
+                    {{ "%.1f%%"|format(resultado.taxa_acerto * 100) }}
+                </strong>
+            </div>
+
+            <div class="metric-card">
+                <span>Retorno médio direcional</span>
+                <strong>
+                    {{ "%+.2f%%"|format(resultado.retorno_medio_direcional * 100) }}
+                </strong>
+            </div>
+
+            <div class="metric-card">
+                <span>Retorno mediano</span>
+                <strong>
+                    {{ "%+.2f%%"|format(resultado.retorno_mediano_direcional * 100) }}
+                </strong>
+            </div>
+
+            <div class="metric-card">
+                <span>Profit factor</span>
+                <strong>
+                    {% if resultado.profit_factor is none %}
+                        n/d
+                    {% else %}
+                        {{ "%.2f"|format(resultado.profit_factor) }}
+                    {% endif %}
+                </strong>
+            </div>
+        </section>
+
+        <section class="comparison-panel">
+            <h2>Como o teste foi calculado</h2>
+            <p>
+                {{ resultado.metodologia }}
+            </p>
+            <p>
+                O backtest avalia direção, não simula uma estratégia
+                executável. Custos, impostos, slippage, liquidez,
+                stop e alvo não estão incluídos.
+            </p>
+
+            {% if tempo_backtest is not none %}
+            <p>
+                Processado em {{ "%.2f"|format(tempo_backtest) }} segundos.
+            </p>
+            {% endif %}
+        </section>
+
+        {% if resultado.eventos %}
+        <div class="history-table-wrapper">
+            <table class="history-table">
+                <thead>
+                    <tr>
+                        <th>Data do sinal</th>
+                        <th>Sinal</th>
+                        <th>Pontos</th>
+                        <th>Entrada</th>
+                        <th>Saída</th>
+                        <th>Retorno direcional</th>
+                        <th>Resultado</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for evento in resultado.eventos[-15:]|reverse %}
+                    <tr>
+                        <td>
+                            {{ evento.data_sinal[:10] }}
+                        </td>
+                        <td>
+                            <span
+                                class="table-signal signal-{{ evento.sinal|lower }}"
+                            >
+                                {{ evento.sinal }}
+                            </span>
+                        </td>
+                        <td>{{ evento.pontos }}</td>
+                        <td>
+                            R$ {{ "%.2f"|format(evento.preco_entrada) }}
+                        </td>
+                        <td>
+                            R$ {{ "%.2f"|format(evento.preco_saida) }}
+                        </td>
+                        <td>
+                            {{ "%+.2f%%"|format(evento.retorno_direcional * 100) }}
+                        </td>
+                        <td>
+                            {{ "Acerto" if evento.acerto else "Erro" }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <div class="report-disclaimer">
+            Resultados passados e backtests não garantem resultados futuros.
+            Use a validação como diagnóstico do motor, não como recomendação
+            de investimento.
+        </div>
+        {% endif %}
+    </main>
+</body>
+</html>

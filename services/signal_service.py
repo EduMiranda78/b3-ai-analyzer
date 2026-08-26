@@ -1,6 +1,9 @@
 from typing import Optional
 
 
+MIN_RISCO_RETORNO = 2.0
+
+
 def _arredondar(
     valor: Optional[float],
     casas: int = 2,
@@ -31,6 +34,9 @@ def _plano_compra(
         else stop_limite
     )
 
+    # Para compra, escolhe o stop mais próximo entre
+    # a estrutura e o limite de 2 ATR. Isso impede que
+    # o risco seja ampliado artificialmente.
     stop = max(
         stop_limite,
         stop_estrutural,
@@ -39,28 +45,60 @@ def _plano_compra(
     risco = preco - stop
 
     if risco <= 0:
-        return None, None, None
-
-    alvo = (
-        resistencia
-        if resistencia > preco
-        else preco + (2 * risco)
-    )
-
-    retorno = alvo - preco
-    risco_retorno = retorno / risco
-
-    if risco_retorno < 2:
-        alvo = preco + (2 * risco)
-        risco_retorno = 2.0
-
-        alertas.append(
-            "A resistência atual não oferece "
-            "relação risco-retorno de 2 para 1. "
-            "O alvo exibido é uma projeção."
+        return (
+            None,
+            None,
+            None,
+            False,
         )
 
-    return stop, alvo, risco_retorno
+    alvo_projetado = not (
+        resistencia > preco
+    )
+
+    if alvo_projetado:
+        alvo = (
+            preco
+            + MIN_RISCO_RETORNO
+            * risco
+        )
+    else:
+        # Quando existe resistência objetiva, ela é
+        # preservada como alvo. O motor não "empurra"
+        # o alvo para além dela só para exibir 2R.
+        alvo = resistencia
+
+    retorno = alvo - preco
+    risco_retorno = (
+        retorno / risco
+    )
+
+    if (
+        not alvo_projetado
+        and risco_retorno
+        < MIN_RISCO_RETORNO
+    ):
+        alertas.append(
+            "A resistência está antes de 2R. "
+            "O alvo estrutural foi preservado; "
+            "o setup não deve ser tratado como "
+            "operação 2:1."
+        )
+
+    if alvo_projetado:
+        alertas.append(
+            "Não há resistência de 20 pregões "
+            "acima do preço. O alvo é uma "
+            "projeção de 2R, não um nível "
+            "estrutural confirmado."
+        )
+
+    return (
+        stop,
+        alvo,
+        risco_retorno,
+        alvo_projetado,
+    )
 
 
 def _plano_venda(
@@ -88,37 +126,78 @@ def _plano_venda(
     risco = stop - preco
 
     if risco <= 0:
-        return None, None, None
+        return (
+            None,
+            None,
+            None,
+            False,
+        )
 
-    alvo = (
-        suporte
-        if 0 < suporte < preco
-        else preco - (2 * risco)
+    alvo_projetado = not (
+        0 < suporte < preco
     )
 
-    alvo = max(
-        alvo,
-        0.01,
-    )
-
-    retorno = preco - alvo
-    risco_retorno = retorno / risco
-
-    if risco_retorno < 2:
+    if alvo_projetado:
         alvo = max(
-            preco - (2 * risco),
+            (
+                preco
+                - MIN_RISCO_RETORNO
+                * risco
+            ),
             0.01,
         )
+    else:
+        alvo = suporte
 
-        risco_retorno = 2.0
+    retorno = preco - alvo
+    risco_retorno = (
+        retorno / risco
+    )
 
+    if (
+        not alvo_projetado
+        and risco_retorno
+        < MIN_RISCO_RETORNO
+    ):
         alertas.append(
-            "O suporte atual não oferece "
-            "relação risco-retorno de 2 para 1. "
-            "O alvo exibido é uma projeção."
+            "O suporte está antes de 2R. "
+            "O alvo estrutural foi preservado; "
+            "o setup não deve ser tratado como "
+            "operação 2:1."
         )
 
-    return stop, alvo, risco_retorno
+    if alvo_projetado:
+        alertas.append(
+            "Não há suporte de 20 pregões "
+            "abaixo do preço. O alvo é uma "
+            "projeção de 2R, não um nível "
+            "estrutural confirmado."
+        )
+
+    return (
+        stop,
+        alvo,
+        risco_retorno,
+        alvo_projetado,
+    )
+
+
+def _qualidade_plano(
+    risco_retorno: Optional[float],
+) -> str:
+    if risco_retorno is None:
+        return "NÃO APLICÁVEL"
+
+    if (
+        risco_retorno
+        >= MIN_RISCO_RETORNO
+    ):
+        return "APROVADO"
+
+    if risco_retorno >= 1.5:
+        return "ATENÇÃO"
+
+    return "FRACO"
 
 
 def calcular_sinal_tecnico(
@@ -144,6 +223,13 @@ def calcular_sinal_tecnico(
         indicadores.get(
             "sma200",
             0,
+        )
+    )
+
+    sma200_disponivel = bool(
+        indicadores.get(
+            "sma200_disponivel",
+            sma200 > 0,
         )
     )
 
@@ -188,10 +274,43 @@ def calcular_sinal_tecnico(
         )
     )
 
+    atr_percentual = float(
+        indicadores.get(
+            "atr_percentual",
+            (
+                atr / preco
+                if preco > 0
+                else 0
+            ),
+        )
+    )
+
+    rompimento20 = (
+        indicadores.get(
+            "rompimento20",
+            "nenhum",
+        )
+    )
+
+    clv = float(
+        indicadores.get(
+            "clv",
+            0,
+        )
+    )
+
+    range_atr = float(
+        indicadores.get(
+            "range_atr",
+            0,
+        )
+    )
+
     pontos = 0
     motivos = []
     alertas = []
 
+    # 1) Estrutura curta.
     if preco > ema9 > ema21:
         pontos += 2
 
@@ -214,21 +333,40 @@ def calcular_sinal_tecnico(
             "direcional claro."
         )
 
-    if preco > sma50:
+    # 2) Tendência intermediária.
+    tolerancia_preco = (
+        max(preco, 1.0) * 1e-6
+    )
+
+    if preco > (
+        sma50 + tolerancia_preco
+    ):
         pontos += 1
 
         motivos.append(
             "Preço acima da SMA 50."
         )
 
-    else:
+    elif preco < (
+        sma50 - tolerancia_preco
+    ):
         pontos -= 1
 
         motivos.append(
             "Preço abaixo da SMA 50."
         )
 
-    if sma200 > 0:
+    else:
+        motivos.append(
+            "Preço praticamente sobre a SMA 50."
+        )
+
+    # 3) Tendência longa, apenas quando há
+    # histórico suficiente para uma SMA 200 real.
+    if (
+        sma200_disponivel
+        and sma200 > 0
+    ):
         if preco > sma200:
             pontos += 1
 
@@ -236,27 +374,55 @@ def calcular_sinal_tecnico(
                 "Preço acima da SMA 200."
             )
 
-        else:
+        elif preco < sma200:
             pontos -= 1
 
             motivos.append(
                 "Preço abaixo da SMA 200."
             )
+    else:
+        alertas.append(
+            "SMA 200 indisponível: histórico "
+            "ainda insuficiente para confirmar "
+            "a tendência de longo prazo."
+        )
 
-    if macd_histograma > 0:
+    # 4) Momentum pelo MACD. Zero é neutro.
+    tolerancia_macd = (
+        max(
+            abs(preco),
+            1.0,
+        )
+        * 1e-10
+    )
+
+    if (
+        macd_histograma
+        > tolerancia_macd
+    ):
         pontos += 1
 
         motivos.append(
             "Histograma do MACD positivo."
         )
 
-    else:
+    elif (
+        macd_histograma
+        < -tolerancia_macd
+    ):
         pontos -= 1
 
         motivos.append(
             "Histograma do MACD negativo."
         )
 
+    else:
+        motivos.append(
+            "Histograma do MACD neutro."
+        )
+
+    # 5) RSI é usado como confirmação, não como
+    # gatilho isolado.
     if 55 <= rsi <= 70:
         pontos += 1
 
@@ -282,6 +448,7 @@ def calcular_sinal_tecnico(
             "RSI em região de sobrevenda."
         )
 
+    # 6) Persistência de preço.
     if retorno20 >= 0.03:
         pontos += 1
 
@@ -296,6 +463,7 @@ def calcular_sinal_tecnico(
             "Retorno de 20 pregões negativo."
         )
 
+    # 7) Volume confirma a direção já formada.
     if volume_ratio >= 1.20:
         if pontos > 0:
             pontos += 1
@@ -316,8 +484,84 @@ def calcular_sinal_tecnico(
     elif 0 < volume_ratio < 0.70:
         alertas.append(
             "Movimento com volume abaixo "
-            "da média de 20 pregões."
+            "da média dos 20 pregões anteriores."
         )
+
+    # 8) Contexto de price action: um rompimento só
+    # ganha ponto quando a barra fecha na direção do
+    # movimento e tem tamanho minimamente relevante.
+    if rompimento20 == "alta":
+        if (
+            clv >= 0.50
+            and range_atr >= 0.80
+        ):
+            pontos += 1
+
+            motivos.append(
+                "Rompimento da máxima de 20 pregões "
+                "com fechamento forte na barra."
+            )
+        else:
+            alertas.append(
+                "Houve rompimento de alta, mas a "
+                "barra não fechou com força suficiente."
+            )
+
+    elif rompimento20 == "baixa":
+        if (
+            clv <= -0.50
+            and range_atr >= 0.80
+        ):
+            pontos -= 1
+
+            motivos.append(
+                "Rompimento da mínima de 20 pregões "
+                "com fechamento forte na barra."
+            )
+        else:
+            alertas.append(
+                "Houve rompimento de baixa, mas a "
+                "barra não fechou com força suficiente."
+            )
+
+    if atr_percentual >= 0.06:
+        alertas.append(
+            "ATR acima de 6% do preço: "
+            "volatilidade técnica elevada."
+        )
+
+    valor_financeiro_medio = float(
+        indicadores.get(
+            "valor_financeiro_medio20",
+            0,
+        )
+    )
+
+    if 0 < valor_financeiro_medio < 1_000_000:
+        alertas.append(
+            "Liquidez financeira muito baixa nos últimos 20 pregões. "
+            "Entradas e saídas podem ocorrer com maior diferença de preço."
+        )
+    elif 0 < valor_financeiro_medio < 5_000_000:
+        alertas.append(
+            "Liquidez financeira reduzida nos últimos 20 pregões. "
+            "Considere esse risco antes de interpretar o sinal."
+        )
+
+    # Máximo teórico: 9 pontos com SMA 200;
+    # 8 quando ela ainda não existe.
+    score_maximo = (
+        9
+        if sma200_disponivel
+        else 8
+    )
+
+    forca_percentual = (
+        abs(pontos)
+        / score_maximo
+        if score_maximo > 0
+        else 0.0
+    )
 
     if pontos >= 4:
         sinal = "COMPRA"
@@ -328,12 +572,18 @@ def calcular_sinal_tecnico(
     else:
         sinal = "NEUTRO"
 
-    intensidade = abs(pontos)
-
-    if intensidade >= 6:
+    # "Confiança" aqui significa força/confluência
+    # técnica, não probabilidade estatística de acerto.
+    if (
+        sinal != "NEUTRO"
+        and forca_percentual >= 0.67
+    ):
         confianca = "ALTA"
 
-    elif intensidade >= 4:
+    elif (
+        sinal != "NEUTRO"
+        and forca_percentual >= 0.45
+    ):
         confianca = "MÉDIA"
 
     else:
@@ -343,6 +593,7 @@ def calcular_sinal_tecnico(
     stop = None
     alvo = None
     risco_retorno = None
+    alvo_projetado = False
 
     if sinal != "NEUTRO":
         preco_referencia = preco
@@ -358,6 +609,7 @@ def calcular_sinal_tecnico(
                 stop,
                 alvo,
                 risco_retorno,
+                alvo_projetado,
             ) = _plano_compra(
                 preco,
                 suporte,
@@ -371,6 +623,7 @@ def calcular_sinal_tecnico(
                 stop,
                 alvo,
                 risco_retorno,
+                alvo_projetado,
             ) = _plano_venda(
                 preco,
                 suporte,
@@ -413,9 +666,39 @@ def calcular_sinal_tecnico(
             "Preço a menos de 2% do suporte."
         )
 
+    qualidade_plano = (
+        _qualidade_plano(
+            risco_retorno
+        )
+    )
+
+    setup_aprovado = (
+        sinal != "NEUTRO"
+        and risco_retorno is not None
+        and risco_retorno
+        >= MIN_RISCO_RETORNO
+    )
+
+    if (
+        sinal != "NEUTRO"
+        and risco_retorno is not None
+        and not setup_aprovado
+    ):
+        alertas.append(
+            "O viés direcional existe, mas o "
+            "plano não atende ao mínimo de 2R. "
+            "Trate o sinal como observação, "
+            "não como setup aprovado."
+        )
+
     return {
         "sinal": sinal,
         "pontos": pontos,
+        "score_maximo": score_maximo,
+        "forca_percentual": _arredondar(
+            forca_percentual,
+            4,
+        ),
         "confianca": confianca,
         "preco_referencia": _arredondar(
             preco_referencia
@@ -424,6 +707,13 @@ def calcular_sinal_tecnico(
         "alvo": _arredondar(alvo),
         "risco_retorno": _arredondar(
             risco_retorno
+        ),
+        "alvo_projetado": alvo_projetado,
+        "setup_aprovado": (
+            setup_aprovado
+        ),
+        "qualidade_plano": (
+            qualidade_plano
         ),
         "motivos": motivos,
         "alertas": alertas,

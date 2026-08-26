@@ -100,6 +100,58 @@ def inicializar_banco():
             """
         )
 
+        conexao.execute(
+            """
+            CREATE TABLE IF NOT EXISTS shadow_v31 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL,
+                analysis_id INTEGER,
+                market_date TEXT NOT NULL,
+                ticker TEXT NOT NULL,
+                version TEXT NOT NULL,
+                legacy_signal TEXT NOT NULL,
+                shadow_signal TEXT NOT NULL,
+                shadow_state TEXT NOT NULL,
+                price REAL NOT NULL,
+                benchmark_ticker TEXT NOT NULL,
+                benchmark_market_date TEXT,
+                result_json TEXT NOT NULL,
+                UNIQUE (ticker, market_date, version)
+            )
+            """
+        )
+
+        conexao.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_shadow_v31_ticker_date
+            ON shadow_v31 (
+                ticker,
+                market_date DESC
+            )
+            """
+        )
+
+        conexao.execute(
+            """
+            CREATE TABLE IF NOT EXISTS shadow_v31_outcomes (
+                shadow_id INTEGER NOT NULL,
+                horizon INTEGER NOT NULL,
+                evaluated_at TEXT NOT NULL,
+                entry_date TEXT NOT NULL,
+                exit_date TEXT NOT NULL,
+                entry_price REAL NOT NULL,
+                exit_price REAL NOT NULL,
+                asset_return REAL NOT NULL,
+                benchmark_return REAL,
+                excess_return REAL,
+                PRIMARY KEY (shadow_id, horizon),
+                FOREIGN KEY (shadow_id) REFERENCES shadow_v31(id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+
 
 def salvar_analise(
     *,
@@ -370,3 +422,147 @@ def obter_estatisticas(
             "tickers",
         )
     }
+
+
+
+def salvar_shadow_v31(
+    *,
+    ticker: str,
+    analysis_id: int | None,
+    market_date: str,
+    legacy_signal: str,
+    resultado: dict,
+    benchmark_ticker: str = "BOVA11",
+    benchmark_market_date: str | None = None,
+) -> int:
+    inicializar_banco()
+
+    criado_em = datetime.now(
+        TIMEZONE
+    ).isoformat(
+        timespec="seconds"
+    )
+
+    resultado_json = json.dumps(
+        resultado,
+        ensure_ascii=False,
+        allow_nan=False,
+        sort_keys=True,
+    )
+
+    with _conectar() as conexao:
+        conexao.execute(
+            """
+            INSERT INTO shadow_v31 (
+                created_at,
+                analysis_id,
+                market_date,
+                ticker,
+                version,
+                legacy_signal,
+                shadow_signal,
+                shadow_state,
+                price,
+                benchmark_ticker,
+                benchmark_market_date,
+                result_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (ticker, market_date, version)
+            DO UPDATE SET
+                created_at = excluded.created_at,
+                analysis_id = excluded.analysis_id,
+                legacy_signal = excluded.legacy_signal,
+                shadow_signal = excluded.shadow_signal,
+                shadow_state = excluded.shadow_state,
+                price = excluded.price,
+                benchmark_ticker = excluded.benchmark_ticker,
+                benchmark_market_date = excluded.benchmark_market_date,
+                result_json = excluded.result_json
+            """,
+            (
+                criado_em,
+                analysis_id,
+                market_date,
+                ticker.upper().removesuffix(".SA"),
+                resultado["versao"],
+                legacy_signal,
+                resultado["sinal"],
+                resultado["estado"],
+                float(resultado["preco"]),
+                benchmark_ticker.upper().removesuffix(".SA"),
+                benchmark_market_date,
+                resultado_json,
+            ),
+        )
+
+        linha = conexao.execute(
+            """
+            SELECT id
+            FROM shadow_v31
+            WHERE ticker = ?
+              AND market_date = ?
+              AND version = ?
+            """,
+            (
+                ticker.upper().removesuffix(".SA"),
+                market_date,
+                resultado["versao"],
+            ),
+        ).fetchone()
+
+    return int(linha["id"])
+
+
+def listar_shadow_v31(
+    *,
+    ticker: str | None = None,
+    limite: int = 100,
+) -> list[dict]:
+    inicializar_banco()
+
+    limite = max(1, min(int(limite), 1000))
+    parametros: list = []
+
+    sql = """
+        SELECT
+            id,
+            created_at,
+            analysis_id,
+            market_date,
+            ticker,
+            version,
+            legacy_signal,
+            shadow_signal,
+            shadow_state,
+            price,
+            benchmark_ticker,
+            benchmark_market_date,
+            result_json
+        FROM shadow_v31
+    """
+
+    if ticker:
+        sql += " WHERE ticker = ?"
+        parametros.append(
+            ticker.upper().removesuffix(".SA")
+        )
+
+    sql += " ORDER BY market_date DESC, id DESC LIMIT ?"
+    parametros.append(limite)
+
+    with _conectar() as conexao:
+        linhas = conexao.execute(
+            sql,
+            parametros,
+        ).fetchall()
+
+    resultado = []
+    for linha in linhas:
+        item = dict(linha)
+        item["resultado"] = json.loads(
+            item.pop("result_json")
+        )
+        resultado.append(item)
+
+    return resultado

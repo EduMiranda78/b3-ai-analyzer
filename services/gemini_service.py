@@ -24,12 +24,39 @@ def _obter_cliente():
     )
 
 
+def _configuracao_modelo(
+    modelo: str,
+):
+    # Gemini 3 usa thinking_level. A série 2.5
+    # usa thinking_budget. Mantemos compatibilidade
+    # caso o usuário escolha um modelo 2.5 no .env.
+    if modelo.startswith(
+        "gemini-3"
+    ):
+        thinking_config = (
+            types.ThinkingConfig(
+                thinking_level="low",
+            )
+        )
+    else:
+        thinking_config = (
+            types.ThinkingConfig(
+                thinking_budget=0,
+            )
+        )
+
+    return types.GenerateContentConfig(
+        max_output_tokens=700,
+        thinking_config=thinking_config,
+    )
+
+
 def gerar_relatorio(
     prompt: str,
 ) -> str:
     modelo = os.getenv(
         "GEMINI_MODEL",
-        "gemini-2.5-flash",
+        "gemini-3.6-flash",
     )
 
     cliente = _obter_cliente()
@@ -37,12 +64,8 @@ def gerar_relatorio(
     response = cliente.models.generate_content(
         model=modelo,
         contents=prompt,
-        config=types.GenerateContentConfig(
-            temperature=0.1,
-            max_output_tokens=700,
-            thinking_config=types.ThinkingConfig(
-                thinking_budget=0,
-            ),
+        config=_configuracao_modelo(
+            modelo
         ),
     )
 

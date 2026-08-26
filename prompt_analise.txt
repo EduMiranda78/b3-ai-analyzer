@@ -1,32 +1,34 @@
-Explique a análise técnica usando somente os dados fornecidos.
+Explique a análise técnica para uma pessoa leiga, usando somente os dados fornecidos.
 
 O sinal final foi calculado pelo sistema. Não altere, não recalcule e não contradiga esse sinal.
 
 Regras:
 
-- Não invente notícias, fundamentos ou preços.
-- Não repita toda a tabela de dados.
-- Não use introdução.
-- Use no máximo 220 palavras.
-- VENDA representa viés técnico desfavorável ou possível saída. Não significa venda a descoberto.
+- Não invente notícias, fundamentos, probabilidades, preços ou fatos externos.
+- Não dê ordem pessoal de compra ou venda.
+- Não use jargão sem explicar em linguagem simples.
+- Não repita toda a tabela de indicadores.
+- Não use introdução genérica.
+- Use no máximo 160 palavras.
+- VENDA significa cenário técnico desfavorável ou possível sinal de cautela para quem já possui o ativo. Não significa venda a descoberto.
+- Se o plano não atender ao mínimo de 2R, deixe isso claro.
+- Se o sinal for NEUTRO, diga que não existe direção técnica clara e que o sistema prefere aguardar.
 
 Formato:
 
-## Leitura técnica
+## Em poucas palavras
 
-Explique tendência, momento, volume e volatilidade em até dois parágrafos curtos.
+Explique em duas ou três frases o que está acontecendo com o ativo e o que isso significa para um leigo.
 
-## Níveis e risco
+## Níveis principais
 
-Comente suporte, resistência, preço de referência, stop, alvo e relação risco-retorno.
+Mostre somente preço atual, suporte, resistência e, quando houver, stop, alvo e relação risco-retorno.
 
-## Pontos de atenção
+## Atenção
 
-Liste no máximo três riscos ou conflitos.
+Liste no máximo três pontos importantes.
 
 ## SINALIZAÇÃO FINAL: repita exatamente o sinal fornecido
-
-Justificativa: uma frase direta.
 
 Dados:
 

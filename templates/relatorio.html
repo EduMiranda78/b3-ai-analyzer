@@ -1,261 +1,144 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-
 <head>
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
-    <title>
-        Relatório de Mercado
-    </title>
-
-    <link
-        rel="stylesheet"
-        href="{{ url_for('static', filename='css/style.css') }}"
-    >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório de Mercado</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-
 <body class="report-page">
-
-    <div class="report-container">
-
+    <main class="report-container">
         {% if error %}
-
-        <div class="error-card">
-
+        <section class="error-card">
+            <p class="report-kicker">Não foi possível concluir</p>
             <h1>Falha na análise</h1>
-
-            <div class="error-message">
-                {{ error }}
-            </div>
-
-            <a
-                href="/"
-                class="btn-secondary"
-            >
-                Nova consulta
-            </a>
-
-        </div>
-
+            <div class="error-message">{{ error }}</div>
+            <p class="error-help">
+                Se o ticker estiver correto, o problema pode estar na fonte de dados.
+                Tente novamente em alguns instantes.
+            </p>
+            <a href="/" class="btn-secondary">Nova consulta</a>
+        </section>
         {% else %}
-
-        <div class="report-card">
-
-            <div class="report-header">
-
+        <article class="report-card">
+            <header class="report-header">
                 <div>
-                    <p class="report-kicker">
-                        Análise técnica
-                    </p>
-
-                    <h1>
-                        {{ ticker }}
-                    </h1>
-
-                    <p>
-                        Processado em
-                        {{ "%.2f"|format(tempo_total) }}
-                        segundos
+                    <p class="report-kicker">Leitura técnica de mercado</p>
+                    <h1>{{ ticker }}</h1>
+                    <p class="report-meta">
+                        Preço {{ resumo_leigo.preco }}
+                        {% if data_mercado %} · dados até {{ data_mercado }}{% endif %}
                     </p>
                 </div>
-
-                <div
-                    class="signal-badge signal-{{ analise.sinal|lower }}"
-                >
+                <div class="signal-badge signal-{{ analise.sinal|lower }}">
                     {{ analise.sinal }}
                 </div>
+            </header>
 
-            </div>
+            <section class="plain-summary plain-summary-{{ analise.sinal|lower }}">
+                <span class="plain-label">Resumo direto</span>
+                <h2>{{ resumo_leigo.titulo }}</h2>
+                <p>{{ resumo_leigo.explicacao }}</p>
+                <p><strong>Na prática:</strong> {{ resumo_leigo.conduta }}</p>
+            </section>
 
-            <section class="signal-summary">
-
+            <section class="signal-summary simple-metrics">
                 <div class="metric-card">
-                    <span>Pontuação</span>
-                    <strong>
-                        {{ analise.pontos }}
-                    </strong>
+                    <span>Força do sinal</span>
+                    <strong>{{ resumo_leigo.forca }}</strong>
                 </div>
-
                 <div class="metric-card">
-                    <span>Confiança</span>
-                    <strong>
-                        {{ analise.confianca }}
-                    </strong>
+                    <span>Plano técnico</span>
+                    <strong>{{ resumo_leigo.plano }}</strong>
                 </div>
-
                 <div class="metric-card">
-                    <span>Preço</span>
-                    <strong>
-                        R$
-                        {{ "%.2f"|format(indicadores.preco) }}
-                    </strong>
+                    <span>Suporte</span>
+                    <strong>R$ {{ "%.2f"|format(indicadores.suporte20) }}</strong>
                 </div>
-
                 <div class="metric-card">
-                    <span>RSI 14</span>
-                    <strong>
-                        {{ "%.2f"|format(indicadores.rsi14) }}
-                    </strong>
+                    <span>Resistência</span>
+                    <strong>R$ {{ "%.2f"|format(indicadores.resistencia20) }}</strong>
                 </div>
-
             </section>
 
             {% if analise.preco_referencia is not none %}
-
             <section class="trade-plan">
-
-                <h2>
-                    Plano técnico
-                </h2>
-
-                <div class="trade-plan-grid">
-
+                <div class="section-heading">
                     <div>
-                        <span>Referência</span>
-                        <strong>
-                            R$
-                            {{ "%.2f"|format(analise.preco_referencia) }}
-                        </strong>
+                        <p class="report-kicker">Plano de risco</p>
+                        <h2>Níveis calculados pelo motor</h2>
                     </div>
-
-                    <div>
-                        <span>Stop</span>
-                        <strong>
-                            R$
-                            {{ "%.2f"|format(analise.stop) }}
-                        </strong>
-                    </div>
-
-                    <div>
-                        <span>Alvo</span>
-                        <strong>
-                            R$
-                            {{ "%.2f"|format(analise.alvo) }}
-                        </strong>
-                    </div>
-
-                    <div>
-                        <span>Risco-retorno</span>
-                        <strong>
-                            1 :
-                            {{ "%.2f"|format(analise.risco_retorno) }}
-                        </strong>
-                    </div>
-
+                    <span class="plan-status plan-{{ analise.get('qualidade_plano', 'NÃO APLICÁVEL')|lower|replace('ç','c')|replace('ã','a') }}">
+                        {{ analise.get('qualidade_plano', 'NÃO APLICÁVEL') }}
+                    </span>
                 </div>
-
+                <div class="trade-plan-grid">
+                    <div><span>Referência</span><strong>R$ {{ "%.2f"|format(analise.preco_referencia) }}</strong></div>
+                    <div><span>Stop</span><strong>{% if analise.stop is not none %}R$ {{ "%.2f"|format(analise.stop) }}{% else %}N/D{% endif %}</strong></div>
+                    <div><span>Alvo</span><strong>{% if analise.alvo is not none %}R$ {{ "%.2f"|format(analise.alvo) }}{% else %}N/D{% endif %}</strong></div>
+                    <div><span>Risco-retorno</span><strong>{{ resumo_leigo.risco_retorno }}</strong></div>
+                </div>
             </section>
-
             {% endif %}
 
-            <section class="signal-reasons">
-
-                <div>
-                    <h2>
-                        Motivos do sinal
-                    </h2>
-
-                    <ul>
-                        {% for motivo in analise.motivos %}
-                        <li>
-                            {{ motivo }}
-                        </li>
-                        {% endfor %}
-                    </ul>
-                </div>
-
-                {% if analise.alertas %}
-
-                <div class="alert-panel">
-
-                    <h2>
-                        Pontos de atenção
-                    </h2>
-
-                    <ul>
-                        {% for alerta in analise.alertas %}
-                        <li>
-                            {{ alerta }}
-                        </li>
-                        {% endfor %}
-                    </ul>
-
-                </div>
-
-                {% endif %}
-
+            {% if analise.alertas %}
+            <section class="attention-box">
+                <h2>Pontos de atenção</h2>
+                <ul>
+                    {% for alerta in analise.alertas[:3] %}
+                    <li>{{ alerta }}</li>
+                    {% endfor %}
+                </ul>
             </section>
+            {% endif %}
 
+            <details class="technical-details">
+                <summary>Ver detalhes técnicos</summary>
+                <div class="technical-details-body">
+                    <div>
+                        <h3>O que sustentou o sinal</h3>
+                        <ul>
+                            {% for motivo in analise.motivos %}
+                            <li>{{ motivo }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    <div class="technical-grid">
+                        <span>Score <strong>{{ analise.pontos }}/{{ analise.get('score_maximo', 9) }}</strong></span>
+                        <span>RSI 14 <strong>{{ "%.1f"|format(indicadores.rsi14) }}</strong></span>
+                        <span>Volume relativo <strong>{{ "%.2f"|format(indicadores.volume_ratio) }}x</strong></span>
+                        {% set preco_indicador = indicadores.get("preco", 0) %}
+                        {% set atr_percentual = indicadores.get("atr_percentual") %}
+                        {% if atr_percentual is none %}
+                            {% set atr_percentual = (indicadores.get("atr14", 0) / preco_indicador) if preco_indicador else 0 %}
+                        {% endif %}
+                        <span>ATR/preço <strong>{{ "%.2f"|format(atr_percentual * 100) }}%</strong></span>
+                    </div>
+                </div>
+            </details>
 
             {% if origem_relatorio == "motor local" %}
-
             <div class="fallback-notice">
-
-                A explicação pela IA ficou
-                temporariamente indisponível.
-                Este relatório foi montado pelo
-                motor técnico local.
-
+                A explicação por IA não respondeu a tempo. A leitura exibida foi montada pelo motor técnico local, preservando o mesmo sinal.
             </div>
-
+            {% else %}
+            <details class="ai-details">
+                <summary>Ver explicação complementar por IA</summary>
+                <section class="report-content">{{ relatorio|safe }}</section>
+            </details>
             {% endif %}
 
-            <section class="report-content">
-
-                {{ relatorio|safe }}
-
-            </section>
-
             <div class="report-disclaimer">
-
-                Esta é uma leitura técnica baseada em
-                dados históricos. Não representa garantia
-                de resultado nem recomendação individual
-                de investimento.
-
+                Leitura técnica baseada em dados históricos. Não é garantia de resultado nem recomendação individual de investimento.
             </div>
 
-            <div class="report-footer">
-
-                <a
-                    href="/"
-                    class="btn-secondary"
-                >
-                    Nova consulta
-                </a>
-
-                {% if analise_id %}
-
-                <a
-                    href="/historico/{{ analise_id }}"
-                    class="btn-secondary"
-                >
-                    Abrir análise salva
-                </a>
-
-                {% endif %}
-
-
-                <button
-                    onclick="window.print()"
-                    class="btn-primary"
-                >
-                    Imprimir relatório
-                </button>
-
-            </div>
-
-        </div>
-
+            <footer class="report-footer">
+                <a href="/" class="btn-secondary">Nova consulta</a>
+                {% if analise_id %}<a href="/historico/{{ analise_id }}" class="btn-secondary">Análise salva</a>{% endif %}
+                <button onclick="window.print()" class="btn-primary">Imprimir</button>
+            </footer>
+        </article>
         {% endif %}
-
-    </div>
-
+    </main>
 </body>
-
 </html>

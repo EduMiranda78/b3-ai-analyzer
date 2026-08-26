@@ -38,6 +38,11 @@ def analise_compra():
         "stop": 104.0,
         "alvo": 125.0,
         "risco_retorno": 2.5,
+        "score_maximo": 9,
+        "forca_percentual": 0.78,
+        "setup_aprovado": True,
+        "qualidade_plano": "APROVADO",
+        "alvo_projetado": False,
         "motivos": [
             "Preço acima das médias.",
             "MACD positivo.",
@@ -85,7 +90,7 @@ def preparar_dependencias(
     monkeypatch.setattr(
         main,
         "enviar_para_telegram",
-        lambda ticker, sinal: True,
+        lambda ticker, sinal, **kwargs: True,
     )
 
 

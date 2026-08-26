@@ -71,7 +71,7 @@ def test_relatorio_exibe_motor_de_sinal(
     monkeypatch.setattr(
         main,
         "enviar_para_telegram",
-        lambda ticker, sinal: True,
+        lambda ticker, sinal, **kwargs: True,
     )
 
     main.app.config["TESTING"] = True
@@ -92,4 +92,34 @@ def test_relatorio_exibe_motor_de_sinal(
     assert "PETR4" in html
     assert "COMPRA" in html
     assert "Plano técnico" in html
-    assert "1 :" in html
+    assert "1 para" in html
+
+
+def test_relatorio_calcula_atr_percentual_quando_campo_nao_existe(monkeypatch):
+    """O template não pode retornar 500 se um payload legado não trouxer atr_percentual."""
+    monkeypatch.setattr(
+        main,
+        "buscar_dados_ativo",
+        lambda ticker: ({"historico": object()}, None),
+    )
+    monkeypatch.setattr(
+        main,
+        "calcular_indicadores",
+        lambda historico: indicadores_validos(),
+    )
+    monkeypatch.setattr(
+        main,
+        "gerar_relatorio_ia",
+        lambda prompt: "## SINALIZAÇÃO FINAL: COMPRA",
+    )
+    monkeypatch.setattr(main, "salvar_analise", lambda **kwargs: 1)
+    monkeypatch.setattr(main, "enviar_para_telegram", lambda *args, **kwargs: True)
+
+    main.app.config["TESTING"] = True
+    with main.app.test_client() as client:
+        resposta = client.post("/gerar_relatorio", data={"ticker": "PETR4"})
+
+    html = resposta.get_data(as_text=True)
+    assert resposta.status_code == 200
+    assert "ATR/preço" in html
+    assert "2.73%" in html

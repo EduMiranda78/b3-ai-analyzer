@@ -1,190 +1,270 @@
-# Analisador de Ativos com IA
+# B3 AI Analyzer
 
-Aplicação web em Python e Flask para gerar relatórios de análise de ativos negociados na B3.
+Aplicação web em Python/Flask para análise técnica de ações e FIIs da B3.
 
-O sistema consulta dados de mercado pelo Yahoo Finance, calcula indicadores técnicos com `pandas-ta` e envia os dados consolidados ao Google Gemini para produzir um relatório em português. O resultado pode incluir uma sinalização resumida enviada ao Telegram.
+O projeto separa o **motor quantitativo** da camada de IA: o sinal é calculado localmente a partir dos dados de mercado; o Gemini apenas explica os dados e o sinal já definidos. Se a API de IA estiver indisponível, um relatório local é gerado automaticamente.
 
-> Projeto em desenvolvimento. Os relatórios são informativos e não constituem recomendação de investimento.
+> Uso educacional e informativo. Não constitui recomendação de investimento.
 
-## Funcionalidades
+## O que o projeto faz
 
-- Consulta de ações e fundos imobiliários da B3 por ticker.
-- Inclusão automática do sufixo `.SA` quando ele não for informado.
-- Histórico de preços dos últimos três meses.
-- Cache local dos dados por 15 minutos.
-- Cálculo de indicadores técnicos:
-  - SMA 9 e SMA 21
-  - EMA 9 e EMA 21
-  - MACD 12, 26 e 9
-  - RSI 14
-  - volatilidade anualizada de 20 períodos
-- Coleta de informações da empresa, preço atual, preço-alvo, recomendações e notícias disponíveis.
-- Geração de relatório com Google Gemini.
-- Interface web responsiva para envio do ticker.
-- Envio opcional da sinalização final para um chat do Telegram.
-- Execução local com Flask ou em produção com Gunicorn e WSGI.
+- Consulta cotações diárias com `yfinance`.
+- Aceita tickers da B3 com ou sem o sufixo `.SA`.
+- Mantém cache de mercado por 15 minutos.
+- Calcula indicadores e contexto técnico:
+  - EMA 9 e EMA 21;
+  - SMA 50 e SMA 200;
+  - RSI 14;
+  - MACD 12/26/9;
+  - ATR 14;
+  - volatilidade anualizada de 20 pregões;
+  - retorno de 20 e 60 pregões;
+  - suporte e resistência dos 20 pregões anteriores;
+  - volume relativo aos 20 pregões anteriores;
+  - Close Location Value (CLV);
+  - amplitude da barra em ATR;
+  - rompimento de máxima/mínima de 20 pregões.
+- Calcula sinal local: `COMPRA`, `VENDA` ou `NEUTRO`.
+- Diferencia **força técnica** de probabilidade estatística de acerto.
+- Calcula stop, alvo, relação risco-retorno e qualidade do plano.
+- Não desloca um alvo estrutural apenas para forçar uma relação 2:1.
+- Persiste as análises em SQLite.
+- Compara cada análise com a anterior do mesmo ticker.
+- Envia sinalização opcional ao Telegram.
+- Possui backtest direcional de 5 anos pela interface web e por CLI.
+- Usa Gemini para a explicação textual, com fallback local.
 
-## Tecnologias
-
-- Python 3
-- Flask
-- Gunicorn
-- Google Gemini API
-- yfinance
-- pandas
-- pandas-ta
-- markdown2
-- python-dotenv
-- HTML, CSS e JavaScript
-
-## Estrutura principal
+## Arquitetura
 
 ```text
-Analisador/
+.
 ├── main.py
 ├── wsgi.py
-├── gemini_analyzer.py
-├── verify_models.py
 ├── prompt_analise.txt
-├── prompt_analise_original.txt
-├── requirements.txt
-├── .env.example
-├── .gitignore
-└── templates/
-    ├── index.html
-    └── relatorio.html
+├── services/
+│   ├── backtest_service.py
+│   ├── cache_service.py
+│   ├── gemini_service.py
+│   ├── history_service.py
+│   ├── indicators_service.py
+│   ├── market_service.py
+│   ├── report_service.py
+│   ├── signal_service.py
+│   └── telegram_service.py
+├── scripts/
+│   ├── backtest.py
+│   └── check.sh
+├── templates/
+│   ├── backtest.html
+│   ├── historico.html
+│   ├── historico_detalhe.html
+│   ├── index.html
+│   └── relatorio.html
+├── static/
+└── tests/
 ```
 
-## Requisitos
+## Como o sinal é formado
 
-- Python 3.10 ou superior
-- Conta e chave de API do Google Gemini
-- Acesso à internet para consultar o Yahoo Finance e o Gemini
-- Bot e chat do Telegram, somente para quem quiser receber notificações
+O motor usa uma pontuação de confluência. Entre os fatores considerados estão:
+
+1. alinhamento do preço com EMA 9 e EMA 21;
+2. posição em relação à SMA 50;
+3. posição em relação à SMA 200, quando há histórico suficiente;
+4. histograma do MACD;
+5. faixa do RSI;
+6. retorno de 20 pregões;
+7. confirmação por volume;
+8. rompimento de 20 pregões com fechamento forte e amplitude relevante.
+
+A pontuação absoluta é normalizada pelo máximo disponível. A classificação exibida como `ALTA`, `MÉDIA` ou `BAIXA` significa **força/confluência técnica**, não uma probabilidade de acerto.
+
+### Plano de risco
+
+Quando existe sinal direcional, o sistema calcula um stop técnico com base em ATR e estrutura de preço.
+
+Se houver resistência/suporte válido, esse nível é preservado como alvo. Se o alvo estrutural oferecer menos de 2R, o sistema mostra a relação real e marca o setup como não aprovado. Um alvo de 2R só é projetado quando não há nível estrutural válido na direção do movimento, e isso é sinalizado ao usuário.
+
+## Backtest
+
+A tela `/backtest` baixa 5 anos de dados e avalia o motor sem usar informações futuras na criação do sinal.
+
+Metodologia padrão:
+
+- `warmup`: 220 pregões;
+- sinal calculado no fechamento do pregão `t`;
+- entrada de referência na abertura de `t+1`;
+- saída no fechamento após 10 pregões;
+- um novo evento é registrado quando o estado do sinal muda;
+- métricas: quantidade de sinais, taxa de acerto, retorno direcional médio/mediano e profit factor.
+
+O teste mede **capacidade direcional**. Ele não inclui custos, impostos, slippage, liquidez nem a execução intraday do stop/alvo. Portanto, não deve ser interpretado como rentabilidade líquida de uma estratégia.
+
+Também é possível executar:
+
+```bash
+python scripts/backtest.py PETR4
+python scripts/backtest.py VALE3 --period 10y --horizon 20
+python scripts/backtest.py ITUB4 --json
+```
 
 ## Instalação
 
-Clone o repositório:
+Requer Python 3.10 ou superior.
 
 ```bash
-git clone https://github.com/EduMiranda78/Analisador.git
-cd Analisador
+python -m venv .venv
 ```
 
-Crie e ative um ambiente virtual:
+Linux/macOS:
 
 ```bash
-python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-No Windows PowerShell:
+Windows PowerShell:
 
 ```powershell
-python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
 Instale as dependências:
 
 ```bash
-pip install --upgrade pip
+python -m pip install --upgrade pip
 pip install -r requirements.txt
+```
+
+Para desenvolvimento:
+
+```bash
+pip install -r requirements-dev.txt
 ```
 
 ## Configuração
 
-Crie o arquivo `.env` a partir do exemplo:
+Copie o exemplo:
 
 ```bash
 cp .env.example .env
 ```
 
-No Windows PowerShell:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Preencha as variáveis:
+Variáveis principais:
 
 ```env
-GOOGLE_API_KEY=sua_chave_da_api_google
-TELEGRAM_BOT_TOKEN=token_do_bot_opcional
-TELEGRAM_CHAT_ID=id_do_chat_opcional
+GOOGLE_API_KEY=
+GEMINI_MODEL=gemini-3.6-flash
+
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
 ```
 
-A variável `GOOGLE_API_KEY` é obrigatória. As variáveis do Telegram são opcionais.
+A chave do Gemini é opcional para o funcionamento do motor técnico. Sem ela, a aplicação usa o relatório local.
 
-Nunca publique o arquivo `.env` nem chaves de API no GitHub.
+## Execução
 
-## Execução local
+Desenvolvimento local:
 
 ```bash
 python main.py
 ```
 
-A aplicação ficará disponível em:
-
-```text
-http://127.0.0.1:5000
-```
-
-## Execução com Gunicorn
+Produção com Gunicorn:
 
 ```bash
 gunicorn --bind 0.0.0.0:5000 wsgi:app
 ```
 
-Para uso público, execute atrás de um proxy reverso, como Nginx, com HTTPS e sem o modo de depuração do Flask.
+A aplicação fica disponível, por padrão, em:
 
-## Como usar
-
-1. Abra a página inicial no navegador.
-2. Digite um ticker da B3, como `PETR4`, `VALE3` ou `MXRF11`.
-3. Clique em **Analisar**.
-4. Aguarde a consulta dos dados e a geração do relatório.
-5. Revise o relatório considerando a data, a fonte dos dados e as limitações descritas abaixo.
-
-## Verificação dos modelos Gemini
-
-O arquivo `verify_models.py` pode ser usado para listar os modelos disponíveis que suportam geração de conteúdo:
-
-```bash
-python verify_models.py
+```text
+http://127.0.0.1:5000
 ```
 
-## Fontes e limitações
+## Testes
 
-- As cotações e informações são obtidas por meio da biblioteca `yfinance`.
-- A disponibilidade, atualização e precisão dos dados dependem das fontes consultadas pelo Yahoo Finance.
-- Notícias, recomendações e dados fundamentalistas podem não estar disponíveis para todos os ativos.
-- O conteúdo produzido pelo Gemini pode conter erros ou interpretações incompletas.
-- Nenhuma saída deve ser usada isoladamente para decidir uma compra ou venda.
+```bash
+python -m pytest
+```
 
-## Segurança
+Ou:
 
-- Não envie `.env`, tokens ou chaves de API para o repositório.
-- Use variáveis de ambiente no servidor.
-- Desative o modo debug em produção.
-- Restrinja o acesso à aplicação quando ela estiver exposta na internet.
-- Atualize as dependências e revise vulnerabilidades periodicamente.
+```bash
+bash scripts/check.sh
+```
 
-## Melhorias previstas
+## Limitações importantes
 
-- Testes automatizados das funções de cálculo e formatação.
-- Tratamento de erros mais específico.
-- Configuração separada para desenvolvimento e produção.
-- Validação mais rigorosa dos tickers recebidos.
-- Histórico persistente das análises.
-- Gráficos de preço e indicadores.
-- Containerização com Docker.
-- Pipeline de integração contínua.
+- `yfinance` é uma camada de acesso a dados do Yahoo Finance; disponibilidade e qualidade podem variar.
+- O sistema trabalha principalmente com dados diários e não modela microestrutura ou execução intraday.
+- O score técnico ainda precisa ser calibrado em uma amostra ampla de ativos e regimes.
+- Backtest histórico pode sofrer seleção de universo, mudanças de composição e outros vieses se for usado de forma ingênua.
+- A relação risco-retorno não substitui dimensionamento de posição.
+- O relatório da IA não altera o sinal calculado localmente.
+- Resultados passados não garantem resultados futuros.
 
-## Autor
+## Próximas evoluções recomendadas
 
-Desenvolvido por [Eduardo Miranda](https://github.com/EduMiranda78).
+1. backtest em universo amplo da B3, com custos e slippage;
+2. walk-forward / out-of-sample para calibrar pesos e limiares;
+3. controle de liquidez e tamanho de posição;
+4. benchmark contra buy-and-hold e contra regras simples;
+5. testes de robustez por regime (alta, baixa e lateral);
+6. autenticação/rate limiting antes de exposição pública;
+7. gráficos de preço, níveis e sinais;
+8. camada fundamentalista separada da análise técnica.
 
 ## Licença
 
-Este repositório ainda não possui uma licença definida. Até que uma licença seja adicionada, o código permanece protegido pelos direitos autorais do autor.
+Consulte o arquivo `LICENSE`.
+
+## Produção e resiliência da fonte de mercado
+
+A coleta usa `yfinance` com dados ajustados. O modo de reparo é ativado quando SciPy está disponível. Se a dependência não estiver presente ou se a primeira consulta com reparo retornar vazia, o serviço tenta novamente sem reparo em vez de rotular automaticamente o ticker como inválido.
+
+Em produção, as variáveis são normalmente carregadas pelo `EnvironmentFile` do systemd. O serviço não depende da presença de um `.env` dentro do repositório.
+
+## Princípio do relatório
+
+O sinal é calculado pelo motor local. A IA só explica o resultado e não pode alterar `COMPRA`, `VENDA` ou `NEUTRO`. A interface prioriza um resumo em linguagem simples e deixa indicadores detalhados em uma seção secundária.
+
+## Motor V3.1 em shadow mode
+
+A partir de 26/08/2026, o projeto inclui o Motor V3.1 em observação paralela.
+Ele não substitui o sinal visível atual nesta fase.
+
+A versão V3.1 foi congelada após uma auditoria histórica ampliada. No universo testado,
+o gatilho comprador de rompimento confirmado apresentou 300 eventos. No horizonte de
+20 pregões, a auditoria registrou 61,0% de acerto, profit factor bruto de 1,77 e profit
+factor de 1,67 após um custo hipotético total de 0,20% por operação. Esses números são
+históricos e não garantem comportamento futuro.
+
+O shadow mode grava, sem interferir na resposta principal:
+
+- sinal do motor atual;
+- sinal V3.1;
+- estado V3.1: COMPRA, AGUARDAR, EVITAR ou NEUTRO;
+- regime do BOVA11;
+- preço e data de mercado;
+- critérios aprovados e pendentes.
+
+A consulta principal continua funcionando mesmo que a avaliação V3.1 falhe ou o benchmark
+BOVA11 esteja temporariamente indisponível.
+
+Para ver os registros coletados:
+
+```bash
+python3 scripts/shadow_v31_status.py --limit 20
+```
+
+Em produção, use o Python do ambiente virtual:
+
+```bash
+.venv/bin/python scripts/shadow_v31_status.py --limit 20
+```
+
+Para desativar a observação paralela sem remover código:
+
+```text
+SHADOW_V31_ENABLED=0
+```

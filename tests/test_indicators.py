@@ -73,6 +73,11 @@ def test_calcula_indicadores_de_alta():
         "macd_status"
     ] == "positivo"
 
+    assert resultado["periodos"] == 100
+    assert resultado["sma200_disponivel"] is False
+    assert -1 <= resultado["clv"] <= 1
+    assert resultado["range_atr"] > 0
+
     assert 0 <= resultado["rsi14"] <= 100
 
 

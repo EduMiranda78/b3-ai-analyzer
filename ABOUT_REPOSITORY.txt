@@ -13,9 +13,10 @@ gemini
 google-gemini
 yfinance
 pandas
-pandas-ta
 stock-analysis
 financial-analysis
 b3
 technical-analysis
+backtesting
+price-action
 telegram-bot

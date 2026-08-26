@@ -1,8 +1,10 @@
 import logging
+import os
 import re
 import time
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import markdown2
 from dotenv import load_dotenv
@@ -10,11 +12,16 @@ from flask import Flask, abort, render_template, request
 
 
 BASE_DIR = Path(__file__).resolve().parent
+TIMEZONE = ZoneInfo("America/Sao_Paulo")
 
 load_dotenv(
     dotenv_path=BASE_DIR / ".env",
 )
 
+from services.backtest_service import (
+    BacktestConfig,
+    avaliar_sinais_historicos,
+)
 from services.gemini_service import (
     gerar_relatorio as gerar_relatorio_ia,
 )
@@ -33,10 +40,15 @@ from services.market_service import (
     buscar_dados_ativo,
 )
 from services.report_service import (
+    construir_resumo_leigo,
     gerar_relatorio_local,
 )
 from services.signal_service import (
     calcular_sinal_tecnico,
+)
+from services.shadow_v31_service import (
+    VERSAO_MOTOR as VERSAO_SHADOW_V31,
+    agendar_shadow_v31,
 )
 from services.telegram_service import (
     enviar_para_telegram,
@@ -69,6 +81,15 @@ app = Flask(__name__)
 
 app.config.update(
     TEMPLATES_AUTO_RELOAD=False,
+    MAX_CONTENT_LENGTH=16 * 1024,
+    MAX_FORM_MEMORY_SIZE=16 * 1024,
+    MAX_FORM_PARTS=20,
+    SHADOW_V31_ENABLED=(
+        os.getenv("SHADOW_V31_ENABLED", "1")
+        .strip()
+        .lower()
+        not in {"0", "false", "no", "off"}
+    ),
 )
 
 inicializar_banco()
@@ -123,11 +144,12 @@ def formatar_dados_para_ia(
     )
 
     return f"""Ticker: {ticker_exibicao}
-Data: {datetime.now():%d/%m/%Y %H:%M}
+Data: {datetime.now(TIMEZONE):%d/%m/%Y %H:%M}
 
 SINAL FIXO DO SISTEMA: {analise['sinal']}
 Pontuação: {analise['pontos']}
-Confiança: {analise['confianca']}
+Força técnica: {analise['confianca']}
+Força normalizada: {analise.get('forca_percentual', 0):.0%}
 
 Preço: R$ {indicadores['preco']:.2f}
 Variação diária: {indicadores['variacao_dia']:.2%}
@@ -146,18 +168,26 @@ Histograma do MACD: {indicadores['macd_histograma']:.4f}
 
 ATR 14: {indicadores['atr14']:.2f}
 Volatilidade anualizada: {indicadores['volatilidade20']:.2%}
+ATR como % do preço: {indicadores.get('atr_percentual', 0):.2%}
 
 Volume atual: {indicadores['volume']:.0f}
 Volume médio de 20 pregões: {indicadores['volume_medio20']:.0f}
 Razão de volume: {indicadores['volume_ratio']:.2f}
+Valor financeiro médio (20 pregões): R$ {indicadores.get('valor_financeiro_medio20', 0):,.0f}
 
 Suporte de 20 pregões: R$ {indicadores['suporte20']:.2f}
 Resistência de 20 pregões: R$ {indicadores['resistencia20']:.2f}
+Rompimento de 20 pregões: {indicadores.get('rompimento20', 'nenhum')}
+Close Location Value: {indicadores.get('clv', 0):.2f}
+Amplitude da barra / ATR: {indicadores.get('range_atr', 0):.2f}
 
 Preço de referência: {preco_referencia}
 Stop técnico: {stop}
 Alvo técnico: {alvo}
 Relação risco-retorno: {risco_retorno}
+Qualidade do plano: {analise.get('qualidade_plano', 'NÃO APLICÁVEL')}
+Setup aprovado (mínimo 2R): {'sim' if analise.get('setup_aprovado') else 'não'}
+Alvo projetado: {'sim' if analise.get('alvo_projetado') else 'não'}
 
 Motivos:
 {motivos}
@@ -179,6 +209,11 @@ def health():
     return {
         "status": "ok",
         "motor_sinal": "ativo",
+        "shadow_v31": (
+            VERSAO_SHADOW_V31
+            if app.config.get("SHADOW_V31_ENABLED")
+            else "desativado"
+        ),
     }, 200
 
 
@@ -282,6 +317,83 @@ def historico_detalhe(
     )
 
 
+
+
+@app.route(
+    "/backtest",
+    methods=["GET", "POST"],
+)
+def backtest():
+    ticker = (
+        request.values
+        .get("ticker", "")
+        .strip()
+        .upper()
+        .removesuffix(".SA")
+    )
+
+    resultado = None
+    erro = None
+    tempo_backtest = None
+
+    if ticker:
+        if not re.fullmatch(
+            r"[A-Z0-9]{4,6}",
+            ticker,
+        ):
+            erro = "Ticker inválido."
+        else:
+            inicio = time.perf_counter()
+
+            dados, erro_mercado = (
+                buscar_dados_ativo(
+                    f"{ticker}.SA",
+                    period="5y",
+                )
+            )
+
+            if erro_mercado:
+                erro = erro_mercado
+            else:
+                try:
+                    resultado = (
+                        avaliar_sinais_historicos(
+                            dados["historico"],
+                            BacktestConfig(
+                                horizonte=10,
+                                warmup=220,
+                            ),
+                        )
+                    )
+
+                    tempo_backtest = (
+                        time.perf_counter()
+                        - inicio
+                    )
+
+                except ValueError as exc:
+                    erro = str(exc)
+
+                except Exception:
+                    logger.exception(
+                        "Falha no backtest de %s",
+                        ticker,
+                    )
+
+                    erro = (
+                        "Não foi possível executar "
+                        "o backtest agora."
+                    )
+
+    return render_template(
+        "backtest.html",
+        ticker=ticker,
+        resultado=resultado,
+        erro=erro,
+        tempo_backtest=tempo_backtest,
+    )
+
+
 @app.post("/gerar_relatorio")
 def gerar_relatorio():
     inicio_total = time.perf_counter()
@@ -292,8 +404,6 @@ def gerar_relatorio():
         .strip()
         .upper()
     )
-
-    import re
 
     ticker_pattern = re.compile(
         r"^[A-Z0-9]{4,6}(\.SA)?$"
@@ -338,6 +448,11 @@ def gerar_relatorio():
 
         analise = calcular_sinal_tecnico(
             indicadores
+        )
+
+        resumo_leigo = construir_resumo_leigo(
+            indicadores,
+            analise,
         )
 
         logger.info(
@@ -418,6 +533,12 @@ def gerar_relatorio():
         enviar_para_telegram(
             ticker.removesuffix(".SA"),
             analise["sinal"],
+            setup_aprovado=analise.get(
+                "setup_aprovado"
+            ),
+            qualidade_plano=analise.get(
+                "qualidade_plano"
+            ),
         )
 
         tempo_total = (
@@ -457,6 +578,24 @@ def gerar_relatorio():
                 ticker,
             )
 
+        if (
+            app.config.get("SHADOW_V31_ENABLED")
+            and not app.config.get("TESTING")
+        ):
+            try:
+                agendar_shadow_v31(
+                    ticker=ticker,
+                    historico_ativo=dados["historico"],
+                    legacy_signal=analise["sinal"],
+                    analysis_id=analise_id,
+                    market_date=dados.get("ultima_data"),
+                )
+            except Exception:
+                logger.exception(
+                    "Falha ao agendar Shadow V3.1 de %s",
+                    ticker,
+                )
+
         return render_template(
             "relatorio.html",
             relatorio=html,
@@ -468,6 +607,8 @@ def gerar_relatorio():
             tempo_total=tempo_total,
             origem_relatorio=origem_relatorio,
             analise_id=analise_id,
+            resumo_leigo=resumo_leigo,
+            data_mercado=dados.get("ultima_data"),
         )
 
     except Exception:

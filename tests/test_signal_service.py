@@ -108,3 +108,74 @@ def test_sinal_neutro():
 
     assert resultado["stop"] is None
     assert resultado["alvo"] is None
+
+
+def test_preserva_resistencia_quando_rr_e_menor_que_2():
+    dados = indicadores_base()
+
+    dados.update(
+        {
+            "preco": 110.0,
+            "ema9": 108.0,
+            "ema21": 105.0,
+            "sma50": 100.0,
+            "sma200": 92.0,
+            "rsi14": 61.0,
+            "macd_histograma": 0.8,
+            "volume_ratio": 1.40,
+            "retorno20": 0.08,
+            "suporte20": 102.0,
+            "resistencia20": 116.0,
+            "atr14": 3.0,
+        }
+    )
+
+    resultado = calcular_sinal_tecnico(
+        dados
+    )
+
+    assert resultado["sinal"] == "COMPRA"
+    assert resultado["alvo"] == 116.0
+    assert resultado["risco_retorno"] == 1.0
+    assert resultado["setup_aprovado"] is False
+    assert resultado["qualidade_plano"] == "FRACO"
+
+    assert any(
+        "resistência está antes de 2R"
+        in alerta
+        for alerta in resultado["alertas"]
+    )
+
+
+def test_rompimento_forte_adiciona_confirmacao():
+    dados = indicadores_base()
+
+    dados.update(
+        {
+            "preco": 112.0,
+            "ema9": 108.0,
+            "ema21": 105.0,
+            "sma50": 100.0,
+            "sma200": 92.0,
+            "rsi14": 61.0,
+            "macd_histograma": 0.8,
+            "volume_ratio": 1.0,
+            "retorno20": 0.08,
+            "suporte20": 100.0,
+            "resistencia20": 110.0,
+            "atr14": 3.0,
+            "rompimento20": "alta",
+            "clv": 0.8,
+            "range_atr": 1.2,
+        }
+    )
+
+    resultado = calcular_sinal_tecnico(
+        dados
+    )
+
+    assert any(
+        "Rompimento da máxima"
+        in motivo
+        for motivo in resultado["motivos"]
+    )
