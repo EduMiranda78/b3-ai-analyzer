@@ -25,9 +25,11 @@ htmlcov/
 *.swp
 *.swo
 
-# Sistema operacional
+# Sistema operacional e histórico de terminal
 .DS_Store
 Thumbs.db
+.lesshst
+.less-history-file
 
 # Logs e arquivos temporários
 *.log
@@ -38,7 +40,8 @@ Thumbs.db
 build/
 dist/
 *.egg-info/
-*.pyc
+
+# Runtime e dados locais
 instance/
 backup_*/
 *.db

@@ -1,62 +1,86 @@
 # Como contribuir
 
-Obrigado pelo interesse em contribuir com o projeto.
+Contribuições são bem-vindas quando preservam a separação entre motor quantitativo, camada de IA e interface.
 
-O b3-ai-analyzer é uma aplicação web para análise de ativos da B3 com Flask, Yahoo Finance, indicadores técnicos e Google Gemini.
-
-## Antes de começar
-
-Antes de abrir uma nova Issue:
+## Antes de abrir uma Issue
 
 1. verifique se o problema já foi relatado;
-2. confirme que o problema pode ser reproduzido;
+2. confirme que consegue reproduzi-lo;
 3. remova chaves, tokens, senhas e dados pessoais;
-4. informe a versão do Python e do sistema operacional;
-5. descreva claramente o resultado esperado e o resultado obtido.
+4. informe Python, sistema operacional e contexto relevante;
+5. descreva resultado esperado e resultado observado.
 
-## Relato de erros
+## Relato de erro
 
-Ao relatar um erro, informe:
+Inclua, quando aplicável:
 
 - ticker utilizado;
 - passos para reprodução;
 - mensagem de erro completa;
-- comportamento esperado;
-- comportamento observado;
+- rota ou componente afetado;
 - versão do Python;
-- sistema operacional;
-- dependências relevantes.
+- commit ou branch;
+- logs sanitizados.
 
-Não publique:
+Nunca publique:
 
 - `GOOGLE_API_KEY`;
 - `TELEGRAM_BOT_TOKEN`;
 - `TELEGRAM_CHAT_ID`;
-- conteúdo do arquivo `.env`;
-- dados pessoais;
+- conteúdo de `.env`;
+- banco SQLite real;
 - credenciais de servidor.
 
-## Sugestões de melhoria
+## Mudanças no motor de mercado
 
-Descreva:
+Alterações em score, filtros, gatilhos ou risco precisam de justificativa metodológica e testes.
 
-- qual problema a melhoria pretende resolver;
-- como a funcionalidade deveria funcionar;
-- possíveis impactos no código existente;
-- exemplos de utilização.
+Evite ajustar parâmetros apenas para melhorar um backtest já observado. Prefira:
 
-## Alterações no código
+- hipótese explícita;
+- teste fora da amostra;
+- comparação por regime;
+- custos plausíveis;
+- amostra prospectiva quando possível.
 
-1. Faça um fork do repositório.
-2. Crie uma branch para a alteração.
-3. Faça mudanças pequenas e objetivas.
-4. Teste a aplicação antes de enviar.
-5. Atualize a documentação quando necessário.
-6. Abra um Pull Request explicando as alterações.
+Consulte [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) e [`docs/MOTOR_V31.md`](docs/MOTOR_V31.md).
 
-Exemplos de nomes de branch:
+## Fluxo recomendado
+
+1. faça fork do repositório;
+2. crie uma branch objetiva;
+3. faça mudanças pequenas e rastreáveis;
+4. atualize testes e documentação;
+5. execute as verificações locais;
+6. abra Pull Request explicando motivação, impacto e validação.
+
+Exemplos de branches:
 
 ```text
-feat/graficos-indicadores
-fix/validacao-ticker
-docs/atualiza-readme
+feat/grafico-preco
+fix/fonte-mercado
+docs/arquitetura
+research/motor-v32
+```
+
+## Validação local
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+python -m pytest
+bash scripts/check.sh
+```
+
+## Pull Requests
+
+Um PR deve informar:
+
+- problema resolvido;
+- arquivos principais alterados;
+- testes executados;
+- impacto esperado no motor e na produção;
+- necessidade de migração, nova variável de ambiente ou mudança operacional.
+
+Mudanças que alterem o comportamento de investimento devem deixar claro se afetam o motor visível, o shadow mode ou apenas a apresentação.
