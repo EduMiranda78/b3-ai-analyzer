@@ -251,7 +251,8 @@ Consulte [`SECURITY.md`](SECURITY.md) antes de expor ou modificar a aplicação.
 
 Desenvolvido e mantido por **Eduardo Miranda**.
 
-GitHub: [`EduMiranda78`](https://github.com/EduMiranda78)
+GitHub: [`EduMiranda78`](https://github.com/EduMiranda78)  
+Site: [Miranda Stack](https://mirandastack.com/)
 
 ## Licença
 
