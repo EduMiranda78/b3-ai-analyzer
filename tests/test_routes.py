@@ -242,3 +242,98 @@ def test_relatorio_local_quando_gemini_falha(
     assert "COMPRA" in html
     assert "motor técnico local" in html
     assert "Plano técnico" in html
+
+
+
+def test_relatorio_com_bai(
+    client,
+    monkeypatch,
+):
+    preparar_dependencias(
+        monkeypatch
+    )
+
+    monkeypatch.setattr(
+        main,
+        "gerar_relatorio_bai",
+        lambda prompt: (
+            "## Em poucas palavras\n\n"
+            "Relatório produzido pela B.AI.\n\n"
+            "## SINALIZAÇÃO FINAL: COMPRA"
+        ),
+    )
+
+    def gemini_nao_deve_ser_chamado(
+        prompt,
+    ):
+        raise AssertionError(
+            "Gemini não deveria ser chamado."
+        )
+
+    monkeypatch.setattr(
+        main,
+        "gerar_relatorio_ia",
+        gemini_nao_deve_ser_chamado,
+    )
+
+    resposta = client.post(
+        "/gerar_relatorio",
+        data={
+            "ticker": "PETR4",
+        },
+    )
+
+    html = resposta.get_data(
+        as_text=True
+    )
+
+    assert resposta.status_code == 200
+    assert "PETR4" in html
+    assert "COMPRA" in html
+    assert "Relatório produzido pela B.AI" in html
+
+
+def test_fallback_bai_para_gemini(
+    client,
+    monkeypatch,
+):
+    preparar_dependencias(
+        monkeypatch
+    )
+
+    def bai_falha(prompt):
+        raise RuntimeError(
+            "B.AI indisponível."
+        )
+
+    monkeypatch.setattr(
+        main,
+        "gerar_relatorio_bai",
+        bai_falha,
+    )
+
+    monkeypatch.setattr(
+        main,
+        "gerar_relatorio_ia",
+        lambda prompt: (
+            "## Em poucas palavras\n\n"
+            "Relatório produzido pelo Gemini.\n\n"
+            "## SINALIZAÇÃO FINAL: COMPRA"
+        ),
+    )
+
+    resposta = client.post(
+        "/gerar_relatorio",
+        data={
+            "ticker": "PETR4",
+        },
+    )
+
+    html = resposta.get_data(
+        as_text=True
+    )
+
+    assert resposta.status_code == 200
+    assert "PETR4" in html
+    assert "COMPRA" in html
+    assert "Relatório produzido pelo Gemini" in html

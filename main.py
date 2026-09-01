@@ -22,6 +22,9 @@ from services.backtest_service import (
     BacktestConfig,
     avaliar_sinais_historicos,
 )
+from services.bai_service import (
+    gerar_relatorio as gerar_relatorio_bai,
+)
 from services.gemini_service import (
     gerar_relatorio as gerar_relatorio_ia,
 )
@@ -486,43 +489,72 @@ def gerar_relatorio():
 
         inicio_ia = time.perf_counter()
 
-        origem_relatorio = "Gemini"
+        origem_relatorio = "B.AI"
 
         try:
-            texto = gerar_relatorio_ia(
+            texto = gerar_relatorio_bai(
                 prompt
             )
 
             logger.info(
-                "Gemini %s: %.2fs",
+                "B.AI %s: %.2fs",
                 ticker,
-               (
+                (
                     time.perf_counter()
                     - inicio_ia
                 ),
             )
 
-        except Exception as erro_ia:
-            origem_relatorio = "motor local"
-
+        except Exception as erro_bai:
             logger.warning(
                 (
-                    "Gemini indisponível para %s. "
-                    "Usando relatório local. "
+                    "B.AI indisponível para %s. "
+                    "Tentando Gemini. "
                     "Erro: %s: %s"
                 ),
                 ticker,
-                type(erro_ia).__name__,
-                erro_ia,
+                type(erro_bai).__name__,
+                erro_bai,
             )
 
-            texto = gerar_relatorio_local(
-                ticker=ticker.removesuffix(
-                    ".SA"
-                ),
-                indicadores=indicadores,
-                analise=analise,
-            )
+            origem_relatorio = "Gemini"
+            inicio_gemini = time.perf_counter()
+
+            try:
+                texto = gerar_relatorio_ia(
+                    prompt
+                )
+
+                logger.info(
+                    "Gemini %s: %.2fs",
+                    ticker,
+                    (
+                        time.perf_counter()
+                        - inicio_gemini
+                    ),
+                )
+
+            except Exception as erro_ia:
+                origem_relatorio = "motor local"
+
+                logger.warning(
+                    (
+                        "Gemini indisponível para %s. "
+                        "Usando relatório local. "
+                        "Erro: %s: %s"
+                    ),
+                    ticker,
+                    type(erro_ia).__name__,
+                    erro_ia,
+                )
+
+                texto = gerar_relatorio_local(
+                    ticker=ticker.removesuffix(
+                        ".SA"
+                    ),
+                    indicadores=indicadores,
+                    analise=analise,
+                )
 
         html = markdown2.markdown(
             texto,
